@@ -1,0 +1,28 @@
+# Zig build artifacts
+zig-cache/
+.zig-cache/
+zig-out/
+
+# Python bytecode files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+env/
+venv/
+ENV/
+.VENV/
+
+# Python egg files
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Miscellaneous
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
