@@ -57,11 +57,11 @@ fn testMachine() void {
     machine.prepare();
     machine.run();
 
-    machine.dumpStack();
+    machine.dumpDebugData();
 }
 
 pub fn main() !void {
-    const data = try loadBytecodeFromFile("/home/ethroop/Documents/Rand/vmlang2/runtime/bytecode.bin");
+    const data = try loadBytecodeFromFile("/Users/captainexpo/Documents/GitHub/ZigLangByteCodeThing/runtime/bytecode.bin");
 
     var machine = Machine.init(.Halted, 1024);
     defer machine.deinit();
@@ -73,8 +73,16 @@ pub fn main() !void {
         machine.addConstant(const_val);
     }
     machine.prepare();
+
+    var timer = try std.time.Timer.start();
+
     machine.run();
-    machine.dumpStack();
+
+    const len: f64 = @floatFromInt(timer.read());
+
+    machine.dumpDebugData();
+
+    std.debug.print("Took {d}ms, {d}ms per instruction\n", .{ len / 1e+6, len / @as(f64, @floatFromInt(machine.instructions_executed)) / 1e+6 });
 
     return;
 }

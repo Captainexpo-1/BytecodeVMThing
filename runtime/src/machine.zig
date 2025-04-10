@@ -21,6 +21,7 @@ pub const Machine = struct {
     stack: []Value,
     sp: usize,
     constants: std.ArrayList(Value),
+    instructions_executed: i64 = 0,
 
     pub fn prepare(self: *Machine) void {
         self.state = MachineState.Running;
@@ -72,7 +73,8 @@ pub const Machine = struct {
     }
 
     fn executeInstruction(self: *Machine, instr: Instruction) void {
-        std.debug.print("Executing instruction: {s}\n", .{instr.toString()});
+        //std.debug.print("Executing instruction: {s}\n", .{instr.toString()});
+        self.instructions_executed += 1;
         switch (instr.instr) {
             OpCode.LoadConst => self.push(self.constants.items[instr.operand]),
             OpCode.Add => {
@@ -102,6 +104,13 @@ pub const Machine = struct {
             OpCode.Jz => {
                 const value = self.pop();
                 if (value.vtype == .Float and value.value.float == 0.0) {
+                    self.current_callframe.?.pc = instr.operand;
+                }
+            },
+            OpCode.Jnz => {
+                const value = self.pop();
+                if (value.vtype == .Float and value.value.float != 0.0) {
+                    //std.debug.print("Jumping to {d}\n", .{instr.operand});
                     self.current_callframe.?.pc = instr.operand;
                 }
             },
@@ -197,7 +206,7 @@ pub const Machine = struct {
                 self.current_callframe.?.local_vars.items[var_index] = self.pop();
             },
             else => {
-                std.debug.print("Unknown instruction encountered: {s}\n", .{@tagName(instr.instr)});
+                //std.debug.print("Unknown instruction encountered: {s}\n", .{@tagName(instr.instr)});
             },
         }
     }
@@ -224,7 +233,7 @@ pub const Machine = struct {
     }
 
     pub fn addFunction(self: *Machine, func: Function) void {
-        std.debug.print("Adding: {s}\n", .{func.toString()});
+        //std.debug.print("Adding: {s}\n", .{func.toString()});
         self.function_table.append(func) catch {
             self.errorAndStop("Failed to add function");
         };
@@ -265,7 +274,7 @@ pub const Machine = struct {
             if (val.vtype == self.function_table.items[function_index].arg_types[i]) {
                 self.current_callframe.?.local_vars.append(val) catch unreachable;
             } else {
-                std.debug.print("Argument type mismatch, expected {s} got {s}\n", .{ @tagName(self.function_table.items[function_index].arg_types[i]), @tagName(val.vtype) });
+                //std.debug.print("Argument type mismatch, expected {s} got {s}\n", .{ @tagName(self.function_table.items[function_index].arg_types[i]), @tagName(val.vtype) });
                 self.errorAndStop(
                     "",
                 );
@@ -277,7 +286,7 @@ pub const Machine = struct {
         self.constants.append(value) catch unreachable;
     }
 
-    pub fn dumpStack(self: *Machine) void {
+    pub fn dumpDebugData(self: *Machine) void {
         std.debug.print("Stack contents:\n", .{});
         for (self.stack[0..self.sp]) |value| {
             std.debug.print("  {s}\n", .{value.toString().data});
@@ -290,6 +299,8 @@ pub const Machine = struct {
                 std.debug.print("  {s}\n", .{v.toString().data});
             }
         }
+
+        std.debug.print("Instructions executed: {d}\n", .{self.instructions_executed});
     }
 };
 
