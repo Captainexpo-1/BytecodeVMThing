@@ -119,33 +119,54 @@ def genByteCode(constants: List[Value], functions: List[Function]):
             
 if __name__ == "__main__":
     constants = [
-        Value(42.0, ValueType.FLOAT),  # Constant 0
-        Value(3.14, ValueType.FLOAT),  # Constant 3
+        Value(0.0, ValueType.FLOAT),  # Constant 0 (0.0)
+        Value(1.0, ValueType.FLOAT),  # Constant 1 (1.0)
+        Value(52.0, ValueType.FLOAT),  # Constant 2 (the input)
+        Value(6.0, ValueType.FLOAT),  # Constant 3 (6.0)
     ]
     
     functions = [
         Function(
-            arg_types=[],
-            return_type=ValueType.NONE,
-            code=[
-                Instruction(OpCode.LoadConst, 0),  # Load constant 0 (42.0)
-                Instruction(OpCode.LoadConst, 1),  # Load constant 3 (3.14)
-                Instruction(OpCode.Call, 1),          # Multiply
-                Instruction(OpCode.Ret)           # Return result
+            arg_types=[],  # No arguments
+            return_type=ValueType.NONE,  # Returns a float
+            code = [
+                Instruction(OpCode.LoadConst, 2),  # Load constant 0 (5.0)
+                Instruction(OpCode.Call, 1),  # Call factorial(5.0)
+                Instruction(OpCode.Halt)  # Halt the program
             ]
         ),
+        # Factorial function
         Function(
-            arg_types=[ValueType.FLOAT, ValueType.FLOAT],
-            return_type=ValueType.FLOAT,
+            arg_types=[ValueType.FLOAT],  # Takes one argument (n)
+            return_type=ValueType.FLOAT,  # Returns a float
             code=[
-                Instruction(OpCode.LoadVar, 0),  # Load variable 0
-                Instruction(OpCode.LoadVar, 1),  # Load variable 1
-                Instruction(OpCode.Add),          # Add the two variables
-                Instruction(OpCode.Ret, 125)           # Return result
+                Instruction(OpCode.LoadVar, 0),  # Load n
+                Instruction(OpCode.Jz, 9),  # If n == 0, jump to recursion
+
+                Instruction(OpCode.LoadVar, 0),  # Load n
+                Instruction(OpCode.LoadConst, 1),  # Load constant 1
+                Instruction(OpCode.Sub, 0),  # n - 1
+                Instruction(OpCode.Call, 1),  # Call factorial(n - 1)
+                Instruction(OpCode.LoadVar, 0),  # Load n
+                Instruction(OpCode.Mul, 0),  # n * factorial(n - 1)
+                Instruction(OpCode.Ret, 0),  # Return the result
+                
+                Instruction(OpCode.LoadConst, 1),  # Load constant 1
+                Instruction(OpCode.Ret, 0),  # Return 1
             ]
         )
-            
-            
     ]
     genByteCode(constants, functions)
-            
+
+def factorial(n):
+    if n == 0:
+        return 1
+    return n * factorial(n - 1)
+
+def factorial(n):
+    tmp = 0
+    if n == 0: return 1
+    tmp = n
+    n = n - 1
+    tmp = tmp * factorial(n)
+    return tmp
