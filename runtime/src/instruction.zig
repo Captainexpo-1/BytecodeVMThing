@@ -3,51 +3,56 @@ const Value = @import("value.zig").Value;
 
 pub const OpCode = enum(u8) {
     // No operation
-    Nop = 0,
+    Nop,
 
     // Stack manipulation
-    Dup = 1,
-    Swap = 2,
+    Dup,
+    Swap,
 
     // Arithmetic operations
-    Add = 3,
-    Sub = 4,
-    Mul = 5,
-    Div = 6,
-    Mod = 7,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
 
     // Logical operations
-    And = 8,
-    Or = 9,
-    Not = 10,
-    Xor = 11,
+    And,
+    Or,
+    Not,
+    Xor,
 
     // Bitwise operations
-    Shl = 12,
-    Shr = 13,
+    Shl,
+    Shr,
 
     // Comparison operations
-    Eq = 14,
-    Neq = 15,
-    Gt = 16,
-    Lt = 17,
-    Ge = 18,
-    Le = 19,
+    Eq,
+    Neq,
+    Gt,
+    Lt,
+    Ge,
+    Le,
 
     // Control flow
-    Jmp = 20,
-    Jz = 21,
-    Jnz = 22,
-    Call = 23,
-    Ret = 24,
+    Jmp,
+    Jz,
+    Jnz,
+    Jif,
+    Call,
+    Ret,
 
     // Variables
-    LoadVar = 25,
-    StoreVar = 26,
+    LoadVar,
+    StoreVar,
+
+    // Cast operations
+    CastToInt,
+    CastToFloat,
 
     // Load and halt
-    LoadConst = 27,
-    Halt = 28,
+    LoadConst,
+    Halt,
 };
 
 pub const Instruction = struct {

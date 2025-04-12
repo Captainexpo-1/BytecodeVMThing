@@ -70,6 +70,14 @@ fn readValue(data: []const u8, pos: *usize) !Value {
             pos.* += 8;
             return Value.newValue(.{ .float = float_value }, .Float);
         },
+        .Int => {
+            if (pos.* + 8 > data.len) return ByteCodeParseError.InvalidBytecode;
+            const buf = data[pos.* .. pos.* + 8];
+
+            const intval: i64 = std.mem.readInt(i64, @ptrCast(buf.ptr), std.builtin.Endian.little);
+            pos.* += 8;
+            return Value.newValue(.{ .int = intval }, .Int);
+        },
         .String => {
             if (pos.* >= data.len) return ByteCodeParseError.InvalidBytecode;
 
@@ -86,6 +94,7 @@ fn readValue(data: []const u8, pos: *usize) !Value {
             pos.* += 1;
             return Value.newValue(.{ .bool = bool_value }, .Bool);
         },
+        .List => unreachable,
         .None => return Value.newValue(.{ .none = {} }, .None),
     }
 }

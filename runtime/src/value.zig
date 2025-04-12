@@ -3,16 +3,22 @@ const String = @import("string.zig").String;
 
 pub const _Value = union(enum) {
     float: f64,
+    int: i64,
     string: String,
     bool: bool,
     none: void,
+    list: std.ArrayList(Value),
 };
 
 pub const ValueType = enum {
+    Int,
     Float,
     String,
     Bool,
     None,
+    List,
+
+    pub var subtype: ?ValueType = null;
 };
 
 pub const Value = struct {
@@ -23,7 +29,10 @@ pub const Value = struct {
         if (self.vtype == .Float and other.vtype == .Float) {
             return newValue(_Value{ .float = self.value.float + other.value.float }, .Float);
         }
-        std.debug.print("Type mismatch in add\n", .{});
+        if (self.vtype == .Int and other.vtype == .Int) {
+            return newValue(_Value{ .int = self.value.int + other.value.int }, .Int);
+        }
+        std.debug.print("Type mismatch in add {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return newValue(_Value{ .none = {} }, .None);
     }
 
@@ -31,7 +40,10 @@ pub const Value = struct {
         if (self.vtype == .Float and other.vtype == .Float) {
             return newValue(_Value{ .float = self.value.float - other.value.float }, .Float);
         }
-        std.debug.print("Type mismatch in sub\n", .{});
+        if (self.vtype == .Int and other.vtype == .Int) {
+            return newValue(_Value{ .int = self.value.int - other.value.int }, .Int);
+        }
+        std.debug.print("Type mismatch in sub {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
 
@@ -39,7 +51,10 @@ pub const Value = struct {
         if (self.vtype == .Float and other.vtype == .Float) {
             return newValue(_Value{ .float = self.value.float * other.value.float }, .Float);
         }
-        std.debug.print("Type mismatch in mul\n", .{});
+        if (self.vtype == .Int and other.vtype == .Int) {
+            return newValue(_Value{ .int = self.value.int * other.value.int }, .Int);
+        }
+        std.debug.print("Type mismatch in mul {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
 
@@ -51,13 +66,29 @@ pub const Value = struct {
             }
             return newValue(_Value{ .float = self.value.float / other.value.float }, .Float);
         }
-        std.debug.print("Type mismatch in div\n", .{});
+        if (self.vtype == .Int and other.vtype == .Int) {
+            if (other.value.int == 0) {
+                std.debug.print("Division by zero\n", .{});
+                return Value.nullValue();
+            }
+            return newValue(_Value{ .int = @divFloor(self.value.int, other.value.int) }, .Int);
+        }
+        std.debug.print("Type mismatch in div {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
 
     pub fn newValue(v: _Value, t: ValueType) Value {
         return Value{
             .value = v,
+            .vtype = t,
+        };
+    }
+
+    pub fn newList(subtype: ValueType) Value {
+        const t = .List;
+        t.subtype = subtype;
+        return Value{
+            .value = _Value{ .list = std.ArrayList(Value).init(std.heap.page_allocator) },
             .vtype = t,
         };
     }
@@ -71,32 +102,97 @@ pub const Value = struct {
             return false;
         }
         return switch (self.vtype) {
+            ValueType.Int => self.value.int == b.value.int,
             ValueType.Float => self.value.float == b.value.float,
             ValueType.String => self.value.string.isEqual(b.value.string),
             ValueType.Bool => self.value.bool == b.value.bool,
             ValueType.None => true,
+            ValueType.List => {
+                if (self.value.list.items.len != b.value.list.items.len) return false;
+                for (self.value.list.items, 0..self.value.list.items.len) |item, i| {
+                    if (!item.eq(b.value.list.items[i])) return false;
+                }
+                return true;
+            },
         };
     }
 
     pub fn gt(self: Value, b: Value) bool {
-        if (self.vtype != .Float or b.vtype != .Float) {
-            return false;
+        if (self.vtype == .Float and b.vtype == .Float) {
+            return self.value.float > b.value.float;
         }
-        return self.value.float > b.value.float;
+        if (self.vtype == .Int and b.vtype == .Int) {
+            return self.value.int > b.value.int;
+        }
+        std.debug.print("Type mismatch in gt {s} and {s}\n", .{ @tagName(self.vtype), @tagName(b.vtype) });
+        return false;
     }
+
     pub fn lt(self: Value, b: Value) bool {
-        if (self.vtype != .Float or b.vtype != .Float) {
-            return false;
+        if (self.vtype == .Float and b.vtype == .Float) {
+            return self.value.float < b.value.float;
         }
-        return self.value.float < b.value.float;
+        if (self.vtype == .Int and b.vtype == .Int) {
+            return self.value.int < b.value.int;
+        }
+        std.debug.print("Type mismatch in lt {s} and {s}\n", .{ @tagName(self.vtype), @tagName(b.vtype) });
+        return false;
     }
 
     pub fn toString(self: Value) String {
         return switch (self.vtype) {
+            ValueType.Int => String.fromInt(self.value.int),
             ValueType.Float => String.fromFloat(self.value.float),
             ValueType.String => self.value.string,
             ValueType.Bool => String.fromBool(self.value.bool),
             ValueType.None => String.new("null"),
+            ValueType.List => {
+                var buffer = std.ArrayList(String).init(std.heap.page_allocator);
+                defer buffer.deinit();
+
+                var totallen: usize = 0;
+
+                for (self.value.list.items) |item| {
+                    const s = item.toString();
+                    totallen += s.len();
+                    buffer.append(s) catch {};
+                }
+
+                totallen += 2 + buffer.items.len * 2 + 1; // Add [] and ", " for every item, and a '\n'
+
+                const final = std.heap.page_allocator.alloc(u8, totallen) catch return String{ .data = "" };
+
+                var pos: usize = 0;
+                final[pos] = '[';
+                pos += 1;
+                for (buffer.items, 0..buffer.items.len) |item, i| {
+                    const s = item.toSlice();
+                    for (s) |c| {
+                        final[pos] = c;
+                        pos += 1;
+                    }
+                    if (i < buffer.items.len - 1) {
+                        final[pos] = ',';
+                        pos += 1;
+                        final[pos] = ' ';
+                        pos += 1;
+                    }
+                }
+                final[pos] = ']';
+                return String{ .data = final[0 .. pos + 1] };
+            },
         };
+    }
+
+    pub fn append(self: Value, other: Value) Value {
+        if (self.vtype == .String and other.vtype == .String) {
+            return newValue(_Value{ .string = self.value.string.add(other.value.string) }, .String);
+        }
+        if (self.vtype == .List and other.vtype == self.vtype.subtype) {
+            self.value.list.append(other);
+            return self;
+        }
+        std.debug.print("Type mismatch in append {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
+        return Value.nullValue();
     }
 };

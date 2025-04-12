@@ -205,8 +205,30 @@ pub const Machine = struct {
                 }
                 self.current_callframe.?.local_vars.items[var_index] = self.pop();
             },
+            OpCode.Jif => {
+                const value = self.pop();
+                if (value.vtype == .Bool and value.value.bool == true) {
+                    self.current_callframe.?.pc = instr.operand;
+                }
+            },
+            OpCode.CastToInt => {
+                const value = self.pop();
+                switch (value.vtype) {
+                    .Float => self.push(Value.newValue(_Value{ .int = @as(i64, @intFromFloat(value.value.float)) }, .Int)),
+                    .Int => self.push(value),
+                    else => self.errorAndStop("CastToInt: Invalid type"),
+                }
+            },
+            OpCode.CastToFloat => {
+                const value = self.pop();
+                switch (value.vtype) {
+                    .Float => self.push(value),
+                    .Int => self.push(Value.newValue(_Value{ .float = @as(f64, @floatFromInt(value.value.int)) }, .Float)),
+                    else => self.errorAndStop("CastToFloat: Invalid type"),
+                }
+            },
             else => {
-                //std.debug.print("Unknown instruction encountered: {s}\n", .{@tagName(instr.instr)});
+                self.errorAndStop(std.fmt.allocPrint(std.heap.page_allocator, "Unknown instruction {s}", .{@tagName(instr.instr)}) catch "Error");
             },
         }
     }
@@ -264,6 +286,7 @@ pub const Machine = struct {
             .function_index = function_index,
             .pc = 0,
             .local_vars = std.ArrayList(Value).init(allocator),
+            .local_vars_types = std.ArrayList(ValueType).init(allocator),
             .return_pc = return_pc,
         };
         self.call_stack.append(new_frame) catch unreachable;
@@ -308,6 +331,7 @@ pub const CallFrame = struct {
     function_index: usize,
     pc: usize,
     local_vars: std.ArrayList(Value),
+    local_vars_types: std.ArrayList(ValueType),
     return_pc: usize,
     pub fn deinit(self: *CallFrame) void {
         self.local_vars.deinit();

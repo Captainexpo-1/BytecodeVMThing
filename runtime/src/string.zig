@@ -19,6 +19,10 @@ pub const String = struct {
         return String{ .data = buffer.toOwnedSlice() };
     }
 
+    pub fn fromInt(value: i64) String {
+        return String{ .data = std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{value}) catch "" };
+    }
+
     pub fn fromFloat(value: f64) String {
         return String{ .data = std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{value}) catch "" };
     }

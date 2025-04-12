@@ -12,6 +12,7 @@ const _Instruction = @import("instruction.zig").OpCode;
 const Function = @import("bytecode.zig").Function;
 
 const Machine = @import("machine.zig").Machine;
+const OpCode = @import("instruction.zig").OpCode;
 
 const loadBytecode = @import("bytecodeloader.zig").loadBytecode;
 const loadBytecodeFromFile = @import("bytecodeloader.zig").loadBytecodeFromFile;
@@ -60,8 +61,16 @@ fn testMachine() void {
     machine.dumpDebugData();
 }
 
+pub fn argsAsArray(allocator: std.mem.Allocator) ![][]u8 {
+    const args = try std.process.argsAlloc(allocator);
+    return args;
+}
+
 pub fn main() !void {
-    const data = try loadBytecodeFromFile("/Users/captainexpo/Documents/GitHub/ZigLangByteCodeThing/runtime/bytecode.bin");
+    const alloc = std.heap.page_allocator;
+    const args = try argsAsArray(alloc);
+
+    const data = try loadBytecodeFromFile(args[1]);
 
     var machine = Machine.init(.Halted, 1024);
     defer machine.deinit();
