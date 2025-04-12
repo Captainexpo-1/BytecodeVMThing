@@ -3,60 +3,75 @@ from typing import List, Any
 
 from enum import Enum
 
+globalnum = 0
+def _auto():
+    global globalnum
+    globalnum += 1
+    return globalnum - 1
+    
+
 class OpCode(Enum):
     # No operation
-    Nop = 0
+    Nop = _auto()
 
     # Stack manipulation
-    Dup = 1
-    Swap = 2
+    Dup = _auto()
+    Swap = _auto()
 
     # Arithmetic operations
-    Add = 3
-    Sub = 4
-    Mul = 5
-    Div = 6
-    Mod = 7
+    Add = _auto()
+    Sub = _auto()
+    Mul = _auto()
+    Div = _auto()
+    Mod = _auto()
 
     # Logical operations
-    And = 8
-    Or = 9
-    Not = 10
-    Xor = 11
+    And = _auto()
+    Or = _auto()
+    Not = _auto()
+    Xor = _auto()
 
     # Bitwise operations
-    Shl = 12
-    Shr = 13
+    Shl = _auto()
+    Shr = _auto()
 
     # Comparison operations
-    Eq = 14
-    Neq = 15
-    Gt = 16
-    Lt = 17
-    Ge = 18
-    Le = 19
+    Eq = _auto()
+    Neq =_auto()
+    Gt = _auto()
+    Lt = _auto()
+    Ge = _auto()
+    Le = _auto()
 
     # Control flow
-    Jmp = 20
-    Jz = 21
-    Jnz = 22
-    Call = 23
-    Ret = 24
+    Jmp = _auto()
+    Jz = _auto()
+    Jnz = _auto()
+    Jif = _auto()
+    Call = _auto()
+    Ret = _auto()
 
     # Variables
-    LoadVar = 25
-    StoreVar = 26
+    LoadVar = _auto()
+    StoreVar = _auto()
+
+    # Cast operations
+    CastToInt = _auto()
+    CastToFloat = _auto()
 
     # Load and halt
-    LoadConst = 27
-    Halt = 28
+    LoadConst = _auto()
+    Halt = _auto()
+
+globalnum = 0
 
 class ValueType(Enum):
-    FLOAT = 0
-    STRING = 1
-    BOOL = 2
-    NONE = 3
-
+    INT = _auto()
+    FLOAT = _auto()
+    STRING = _auto()
+    BOOL = _auto()
+    NONE = _auto()
+    LIST = _auto()
 class Value:
     def __init__(self, value: Any, type: ValueType):
         self.value = value
@@ -73,6 +88,8 @@ class Value:
             return length.to_bytes(4, byteorder='little') + encoded
         elif self.type == ValueType.BOOL:
             return bytes([1 if self.value else 0])
+        elif self.type == ValueType.INT:
+            return self.value.to_bytes(8, byteorder='little')
         return b''
 
 class Instruction:
@@ -99,10 +116,9 @@ class Function:
             bytecode += bytes([arg_type.value])
         a = len(self.code).to_bytes(2, byteorder='little')
         bytecode += a
-        print(int.from_bytes(a, byteorder='little'))
         print("Function code length:", len(self.code))
         for instr in self.code:
-            print("Instruction:", instr.opcode.value, "Arg:", instr.arg)
+            print(f"Instruction: ({instr.opcode.value}){instr.opcode}", "Arg:", instr.arg)
             bytecode += instr.to_bytes()
         return bytecode
 
@@ -119,10 +135,10 @@ def genByteCode(constants: List[Value], functions: List[Function]):
             
 if __name__ == "__main__":
     constants = [
-        Value(0.0, ValueType.FLOAT),  # Constant 0 (0.0)
-        Value(1.0, ValueType.FLOAT),  # Constant 1 (1.0)
-        Value(52.0, ValueType.FLOAT),  # Constant 2 (the input)
-        Value(6.0, ValueType.FLOAT),  # Constant 3 (6.0)
+        Value(0, ValueType.INT),  # Constant 0 (0.0)
+        Value(1, ValueType.INT),  # Constant 1 (1.0)
+        Value(3, ValueType.INT),  # Constant 2 (the input)
+        Value(6, ValueType.INT),  # Constant 3 (6.0)
     ]
     
     functions = [
@@ -137,11 +153,13 @@ if __name__ == "__main__":
         ),
         # Factorial function
         Function(
-            arg_types=[ValueType.FLOAT],  # Takes one argument (n)
-            return_type=ValueType.FLOAT,  # Returns a float
+            arg_types=[ValueType.INT],  # Takes one argument (n)
+            return_type=ValueType.INT,  # Returns a float
             code=[
                 Instruction(OpCode.LoadVar, 0),  # Load n
-                Instruction(OpCode.Jz, 9),  # If n == 0, jump to recursion
+                Instruction(OpCode.LoadConst, 0),  # Load constant 0
+                Instruction(OpCode.Eq, 0),  # If n == 0, jump to recursion
+                Instruction(OpCode.Jif, 11),  # If n == 0, jump to recursion
 
                 Instruction(OpCode.LoadVar, 0),  # Load n
                 Instruction(OpCode.LoadConst, 1),  # Load constant 1
@@ -157,16 +175,3 @@ if __name__ == "__main__":
         )
     ]
     genByteCode(constants, functions)
-
-def factorial(n):
-    if n == 0:
-        return 1
-    return n * factorial(n - 1)
-
-def factorial(n):
-    tmp = 0
-    if n == 0: return 1
-    tmp = n
-    n = n - 1
-    tmp = tmp * factorial(n)
-    return tmp
