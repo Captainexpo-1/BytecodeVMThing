@@ -149,10 +149,8 @@ def genByteCode(constants: List[Value], functions: List[Function], output_file='
 
 def getData():
     constants = [
-        Value(0, ValueType.INT),  # Constant 0 (0.0)
         Value(1, ValueType.INT),  # Constant 1 (1.0)
         Value(10, ValueType.INT),  # Constant 2 (the input)
-        Value(6, ValueType.INT),  # Constant 3 (6.0)
     ]
     
     functions = [
@@ -160,11 +158,11 @@ def getData():
             arg_types=[],  # No arguments
             return_type=ValueType.NONE,  # Returns a float
             code = [
-                Instruction(OpCode.LoadConst, 1),
-                Instruction(OpCode.StoreVar, 0),  # Store input in variable 0
-                Instruction(OpCode.LoadConst, 2),
-                Instruction(OpCode.LoadAddress, 0),
-                Instruction(OpCode.StoreDeref),
+                Instruction(OpCode.LoadConst, 0), # Load constant 0 (1)
+                Instruction(OpCode.StoreVar, 0),  # Store in variable 0
+                Instruction(OpCode.LoadConst, 1), # Load constant 1 (10)
+                Instruction(OpCode.LoadAddress, 0),  # Load get pointer to variable 0
+                Instruction(OpCode.StoreDeref), # Store the value at the pointer
                 Instruction(OpCode.Halt)  # Halt the program
             ]
         ),
