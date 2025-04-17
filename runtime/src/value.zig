@@ -1,6 +1,25 @@
 const std = @import("std");
 const String = @import("string.zig").String;
 
+// New type
+pub const StructInstance = struct {
+    fields: std.StringHashMap(Value),
+    type_name: []const u8,
+
+    pub fn init(allocator: std.mem.Allocator, type_name: []const u8) *StructInstance {
+        const instance = allocator.create(StructInstance) catch unreachable;
+        instance.* = StructInstance{
+            .fields = std.StringHashMap(Value).init(allocator),
+            .type_name = type_name,
+        };
+        return instance;
+    }
+
+    pub fn deinit(self: *StructInstance) void {
+        self.fields.deinit();
+    }
+};
+
 pub const _Value = union(enum) {
     float: f64,
     int: i64,
@@ -8,8 +27,9 @@ pub const _Value = union(enum) {
     bool: bool,
     none: void,
     list: std.ArrayList(Value),
+    struct_inst: *StructInstance,
+    pointer: *Value,
 };
-
 pub const ValueType = enum {
     Int,
     Float,
@@ -17,8 +37,8 @@ pub const ValueType = enum {
     Bool,
     None,
     List,
-
-    pub var subtype: ?ValueType = null;
+    Struct,
+    Pointer,
 };
 
 pub const Value = struct {
@@ -114,6 +134,21 @@ pub const Value = struct {
                 }
                 return true;
             },
+            ValueType.Struct => {
+                if (!std.mem.eql(u8, self.value.struct_inst.type_name, b.value.struct_inst.type_name)) return false;
+                if (self.value.struct_inst.fields.count() != b.value.struct_inst.fields.count()) return false;
+                var keyIterator = self.value.struct_inst.fields.keyIterator();
+                for (0..keyIterator.len) |_| {
+                    const key = keyIterator.next() orelse break;
+                    const self_field_value = self.value.struct_inst.fields.get(key.*) orelse return false;
+                    const b_field_value = b.value.struct_inst.fields.get(key.*) orelse return false;
+                    if (!self_field_value.eq(b_field_value)) return false;
+                }
+                return true;
+            },
+            ValueType.Pointer => {
+                return self.value.pointer == b.value.pointer;
+            },
         };
     }
 
@@ -180,6 +215,54 @@ pub const Value = struct {
                 }
                 final[pos] = ']';
                 return String{ .data = final[0 .. pos + 1] };
+            },
+            ValueType.Struct => {
+                var buffer = std.ArrayList(String).init(std.heap.page_allocator);
+                defer buffer.deinit();
+
+                var keyIterator = self.value.struct_inst.fields.keyIterator();
+
+                for (0..keyIterator.len) |_| {
+                    const key = keyIterator.next() orelse break;
+                    const field_value = self.value.struct_inst.fields.get(key.*);
+                    if (field_value) |value| {
+                        const d = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {s}", .{ key, value.toString().toSlice() }) catch unreachable;
+                        const field_string = String{ .data = d };
+                        buffer.append(field_string) catch {};
+                    }
+                }
+
+                var totallen: usize = 0;
+                for (buffer.items) |item| {
+                    totallen += item.len() + 2; // Add 2 for the curly braces
+                }
+                totallen += 2; // For the outer curly braces
+
+                const final = std.heap.page_allocator.alloc(u8, totallen) catch return String{ .data = "" };
+
+                var pos: usize = 0;
+                final[pos] = '{';
+                pos += 1;
+                for (buffer.items, 0..buffer.items.len) |item, i| {
+                    const s = item.toSlice();
+                    for (s) |c| {
+                        final[pos] = c;
+                        pos += 1;
+                    }
+                    if (i < buffer.items.len - 1) {
+                        final[pos] = ',';
+                        pos += 1;
+                        final[pos] = ' ';
+                        pos += 1;
+                    }
+                }
+                final[pos] = '}';
+                return String{ .data = final[0 .. pos + 1] };
+            },
+            ValueType.Pointer => {
+                const val = self.value.pointer.*;
+                _ = val;
+                return String{ .data = std.fmt.allocPrint(std.heap.page_allocator, "Ptrto({any})", .{self.value.pointer}) catch "error" };
             },
         };
     }

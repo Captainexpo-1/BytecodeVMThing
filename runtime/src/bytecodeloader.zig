@@ -96,6 +96,10 @@ fn readValue(data: []const u8, pos: *usize) !Value {
         },
         .List => unreachable,
         .None => return Value.newValue(.{ .none = {} }, .None),
+        else => {
+            std.debug.print("Unimplemented value type: {d}\n", .{@intFromEnum(value_type)});
+            return ByteCodeParseError.Unimplemented;
+        },
     }
 }
 

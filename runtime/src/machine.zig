@@ -13,19 +13,23 @@ const Function = @import("bytecode.zig").Function;
 
 const allocator = std.heap.page_allocator;
 
+const Stack = @import("stack.zig").Stack;
+
+const Heap = @import("heap.zig").Heap;
+
 pub const Machine = struct {
     current_callframe: ?*CallFrame,
     function_table: std.ArrayList(Function),
     call_stack: std.ArrayList(CallFrame),
     state: MachineState,
-    stack: []Value,
-    sp: usize,
+    stack: Stack,
+    heap: Heap,
     constants: std.ArrayList(Value),
     instructions_executed: i64 = 0,
 
     pub fn prepare(self: *Machine) void {
         self.state = MachineState.Running;
-        self.sp = 0;
+        self.stack.sp = 0;
         if (self.current_callframe == null) {
             if (self.function_table.items.len > 0) {
                 self.callFunction(0);
@@ -55,60 +59,43 @@ pub const Machine = struct {
         }
     }
 
-    fn pop(self: *Machine) Value {
-        if (self.sp == 0) {
-            self.stop();
-            return Value.newValue(_Value{ .none = {} }, .None); // Return a default value if stack is empty
-        }
-        self.sp -= 1;
-        return self.stack[self.sp];
-    }
-    fn push(self: *Machine, value: Value) void {
-        if (self.sp >= self.stack.len) {
-            self.stop();
-            return; // Stack overflow, handle as needed
-        }
-        self.stack[self.sp] = value;
-        self.sp += 1;
-    }
-
     fn executeInstruction(self: *Machine, instr: Instruction) void {
         //std.debug.print("Executing instruction: {s}\n", .{instr.toString()});
         self.instructions_executed += 1;
         switch (instr.instr) {
-            OpCode.LoadConst => self.push(self.constants.items[instr.operand]),
+            OpCode.LoadConst => self.stack.push(self.constants.items[instr.operand]),
             OpCode.Add => {
-                const b = self.pop();
-                const a = self.pop();
-                self.push(a.add(b));
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                self.stack.push(a.add(b));
             },
             OpCode.Sub => {
-                const b = self.pop();
-                const a = self.pop();
-                self.push(a.sub(b));
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                self.stack.push(a.sub(b));
             },
             OpCode.Mul => {
-                const b = self.pop();
-                const a = self.pop();
+                const b = self.stack.pop();
+                const a = self.stack.pop();
                 const r = a.mul(b);
-                self.push(r);
+                self.stack.push(r);
             },
             OpCode.Div => {
-                const b = self.pop();
-                const a = self.pop();
-                self.push(a.div(b));
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                self.stack.push(a.div(b));
             },
             OpCode.Jmp => {
                 self.current_callframe.?.pc = instr.operand;
             },
             OpCode.Jz => {
-                const value = self.pop();
+                const value = self.stack.pop();
                 if (value.vtype == .Float and value.value.float == 0.0) {
                     self.current_callframe.?.pc = instr.operand;
                 }
             },
             OpCode.Jnz => {
-                const value = self.pop();
+                const value = self.stack.pop();
                 if (value.vtype == .Float and value.value.float != 0.0) {
                     //std.debug.print("Jumping to {d}\n", .{instr.operand});
                     self.current_callframe.?.pc = instr.operand;
@@ -144,42 +131,42 @@ pub const Machine = struct {
                 }
             },
             OpCode.Dup => {
-                if (self.sp == 0) {
+                if (self.stack.sp == 0) {
                     self.stop();
                     return;
                 }
-                self.push(self.stack[self.sp - 1]);
+                self.stack.push(self.stack.get(self.stack.sp - 1));
             },
             OpCode.Swap => {
-                if (self.sp < 2) {
+                if (self.stack.sp < 2) {
                     self.stop();
                     return;
                 }
-                const a = self.stack[self.sp - 1];
-                const b = self.stack[self.sp - 2];
-                self.stack[self.sp - 2] = a;
-                self.stack[self.sp - 1] = b;
+                const a = self.stack.get(self.stack.sp - 1);
+                const b = self.stack.get(self.stack.sp - 2);
+                self.stack.set(self.stack.sp - 2, a);
+                self.stack.set(self.stack.sp - 1, b);
             },
             OpCode.Eq => {
-                const b = self.pop();
-                const a = self.pop();
-                self.push(Value.newValue(_Value{ .bool = a.eq(b) }, .Bool));
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                self.stack.push(Value.newValue(_Value{ .bool = a.eq(b) }, .Bool));
             },
             OpCode.Nop => {},
             OpCode.Gt => {
-                const b = self.pop();
-                const a = self.pop();
+                const b = self.stack.pop();
+                const a = self.stack.pop();
                 if (a.vtype == .Float and b.vtype == .Float) {
-                    self.push(Value.newValue(_Value{ .bool = a.gt(b) }, .Bool));
+                    self.stack.push(Value.newValue(_Value{ .bool = a.gt(b) }, .Bool));
                 } else {
                     self.errorAndStop("Type mismatch in Gt");
                 }
             },
             OpCode.Lt => {
-                const b = self.pop();
-                const a = self.pop();
+                const b = self.stack.pop();
+                const a = self.stack.pop();
                 if (a.vtype == .Float and b.vtype == .Float) {
-                    self.push(Value.newValue(_Value{ .bool = a.lt(b) }, .Bool));
+                    self.stack.push(Value.newValue(_Value{ .bool = a.lt(b) }, .Bool));
                 } else {
                     self.errorAndStop("Type mismatch in Lt");
                 }
@@ -190,7 +177,7 @@ pub const Machine = struct {
                     self.errorAndStop("LoadVar: Invalid variable index");
                     return;
                 }
-                self.push(self.current_callframe.?.local_vars.items[var_index]);
+                self.stack.push(self.current_callframe.?.local_vars.items[var_index]);
             },
             OpCode.StoreVar => {
                 const var_index = instr.operand;
@@ -199,36 +186,209 @@ pub const Machine = struct {
                         self.current_callframe.?.local_vars.append(Value.newValue(_Value{ .none = {} }, .None)) catch unreachable;
                     }
                 }
-                if (self.sp == 0) {
+                if (self.stack.sp == 0) {
                     self.errorAndStop("StoreVar: Stack is empty");
                     return;
                 }
-                self.current_callframe.?.local_vars.items[var_index] = self.pop();
+                self.current_callframe.?.local_vars.items[var_index] = self.stack.pop();
             },
             OpCode.Jif => {
-                const value = self.pop();
+                const value = self.stack.pop();
                 if (value.vtype == .Bool and value.value.bool == true) {
                     self.current_callframe.?.pc = instr.operand;
                 }
             },
             OpCode.CastToInt => {
-                const value = self.pop();
+                const value = self.stack.pop();
                 switch (value.vtype) {
-                    .Float => self.push(Value.newValue(_Value{ .int = @as(i64, @intFromFloat(value.value.float)) }, .Int)),
-                    .Int => self.push(value),
+                    .Float => self.stack.push(Value.newValue(_Value{ .int = @as(i64, @intFromFloat(value.value.float)) }, .Int)),
+                    .Int => self.stack.push(value),
                     else => self.errorAndStop("CastToInt: Invalid type"),
                 }
             },
             OpCode.CastToFloat => {
-                const value = self.pop();
+                const value = self.stack.pop();
                 switch (value.vtype) {
-                    .Float => self.push(value),
-                    .Int => self.push(Value.newValue(_Value{ .float = @as(f64, @floatFromInt(value.value.int)) }, .Float)),
+                    .Float => self.stack.push(value),
+                    .Int => self.stack.push(Value.newValue(_Value{ .float = @as(f64, @floatFromInt(value.value.int)) }, .Float)),
                     else => self.errorAndStop("CastToFloat: Invalid type"),
                 }
             },
-            else => {
-                self.errorAndStop(std.fmt.allocPrint(std.heap.page_allocator, "Unknown instruction {s}", .{@tagName(instr.instr)}) catch "Error");
+            OpCode.Shl => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Int and b.vtype == .Int) {
+                    self.stack.push(Value.newValue(_Value{ .int = @as(i64, @intCast(a.value.int)) << @as(u6, @intCast(b.value.int)) }, .Int));
+                } else {
+                    self.errorAndStop("Type mismatch in Shl");
+                }
+            },
+            OpCode.Shr => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Int and b.vtype == .Int) {
+                    self.stack.push(Value.newValue(_Value{ .int = @as(i64, @intCast(a.value.int)) >> @as(u6, @intCast(b.value.int)) }, .Int));
+                } else {
+                    self.errorAndStop("Type mismatch in Shr");
+                }
+            },
+            OpCode.Not => {
+                const value = self.stack.pop();
+                if (value.vtype == .Bool) {
+                    self.stack.push(Value.newValue(_Value{ .bool = !value.value.bool }, .Bool));
+                } else {
+                    self.errorAndStop("Not: Invalid type");
+                }
+            },
+            OpCode.And => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Bool and b.vtype == .Bool) {
+                    self.stack.push(Value.newValue(_Value{ .bool = a.value.bool and b.value.bool }, .Bool));
+                } else {
+                    self.errorAndStop("Type mismatch in And");
+                }
+            },
+            OpCode.Or => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Bool and b.vtype == .Bool) {
+                    self.stack.push(Value.newValue(_Value{ .bool = a.value.bool or b.value.bool }, .Bool));
+                } else {
+                    self.errorAndStop("Type mismatch in Or");
+                }
+            },
+            OpCode.Xor => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                const av = a.value.bool;
+                const bv = b.value.bool;
+                if (a.vtype == .Bool and b.vtype == .Bool) {
+                    self.stack.push(Value.newValue(_Value{ .bool = (av or bv) and !(av and bv) }, .Bool));
+                } else {
+                    self.errorAndStop("Type mismatch in Xor");
+                }
+            },
+            OpCode.BitAnd => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Int and b.vtype == .Int) {
+                    self.stack.push(Value.newValue(_Value{ .int = a.value.int & b.value.int }, .Int));
+                } else {
+                    self.errorAndStop("Type mismatch in BitAnd");
+                }
+            },
+            OpCode.BitOr => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Int and b.vtype == .Int) {
+                    self.stack.push(Value.newValue(_Value{ .int = a.value.int | b.value.int }, .Int));
+                } else {
+                    self.errorAndStop("Type mismatch in BitOr");
+                }
+            },
+            OpCode.BitXor => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Int and b.vtype == .Int) {
+                    self.stack.push(Value.newValue(_Value{ .int = a.value.int ^ b.value.int }, .Int));
+                } else {
+                    self.errorAndStop("Type mismatch in BitXor");
+                }
+            },
+            OpCode.Mod => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                if (a.vtype == .Int and b.vtype == .Int) {
+                    if (b.value.int == 0) {
+                        self.errorAndStop("Division by zero in Mod");
+                        return;
+                    }
+                    self.stack.push(Value.newValue(_Value{ .int = @mod(a.value.int, b.value.int) }, .Int));
+                } else {
+                    self.errorAndStop("Type mismatch in Mod");
+                }
+            },
+            OpCode.Neq => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                self.stack.push(Value.newValue(_Value{ .bool = !a.eq(b) }, .Bool));
+            },
+            OpCode.Ge => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                const is_true = a.eq(b) or a.gt(b);
+                self.stack.push(Value.newValue(_Value{ .bool = is_true }, .Bool));
+            },
+            OpCode.Le => {
+                const b = self.stack.pop();
+                const a = self.stack.pop();
+                const is_true = a.eq(b) or a.lt(b);
+                self.stack.push(Value.newValue(_Value{ .bool = is_true }, .Bool));
+            },
+            OpCode.LoadAddress => {
+                const var_index = instr.operand;
+                if (var_index >= self.current_callframe.?.local_vars.items.len) {
+                    self.errorAndStop("LoadAddress: Invalid variable index");
+                    return;
+                }
+
+                // Create a pointer directly to the value in the call frame
+                const pointer_value = Value.newValue(.{ .pointer = &self.current_callframe.?.local_vars.items[var_index] }, ValueType.Pointer);
+                self.stack.push(pointer_value);
+            },
+            OpCode.Deref => {
+                // var index = operand
+                const addr_value = self.stack.pop();
+                if (addr_value.vtype != .Pointer) {
+                    self.errorAndStop("Deref: Expected pointer type");
+                    return;
+                }
+                const value = self.heap.dereference(addr_value.value.pointer);
+                self.stack.push(value);
+            },
+            OpCode.StoreDeref => {
+                // var index = operand
+                const addr_value = self.stack.pop();
+                if (addr_value.vtype != .Pointer) {
+                    self.errorAndStop("StoreDeref: Expected pointer type");
+                    return;
+                }
+                const value = self.stack.pop();
+                self.heap.store(addr_value.value.pointer, value) catch {
+                    self.errorAndStop("Failed to store value in pointer");
+                    return;
+                };
+            },
+            OpCode.Alloc => {
+                const size = self.stack.pop();
+                if (size.vtype != .Int or size.value.int <= 0) {
+                    self.errorAndStop("Alloc: Invalid size");
+                    return;
+                }
+
+                // Allocate memory
+                const memory = self.heap.alloc(@as(usize, @intCast(size.value.int))) catch {
+                    self.errorAndStop("Alloc: Failed to allocate memory");
+                    return;
+                };
+
+                // Create a value representing the allocated memory
+                const value = Value.newValue(.{ .pointer = memory }, ValueType.Pointer);
+                self.stack.push(value);
+            },
+            OpCode.Free => {
+                const value = self.stack.pop();
+                if (value.vtype != .Pointer) {
+                    self.errorAndStop("Free: Expected pointer type");
+                    return;
+                }
+
+                // Free the allocated memory
+                self.heap.free(value.value.pointer) catch {
+                    self.errorAndStop("Free: Failed to free memory");
+                    return;
+                };
             },
         }
     }
@@ -249,8 +409,8 @@ pub const Machine = struct {
             .function_table = std.ArrayList(Function).init(allocator),
             .call_stack = std.ArrayList(CallFrame).init(allocator),
             .state = s,
-            .stack = allocator.alloc(Value, stack_size) catch unreachable,
-            .sp = 0,
+            .stack = Stack.init(stack_size, allocator),
+            .heap = Heap.init(allocator),
         };
     }
 
@@ -275,6 +435,7 @@ pub const Machine = struct {
         self.constants.deinit();
         self.function_table.deinit();
         self.call_stack.deinit();
+        self.stack.deinit();
     }
 
     pub fn callFunction(self: *Machine, function_index: usize) void {
@@ -293,7 +454,7 @@ pub const Machine = struct {
         self.current_callframe = &self.call_stack.items[self.call_stack.items.len - 1];
 
         for (0..self.function_table.items[function_index].arg_types.len) |i| {
-            const val = self.pop();
+            const val = self.stack.pop();
             if (val.vtype == self.function_table.items[function_index].arg_types[i]) {
                 self.current_callframe.?.local_vars.append(val) catch unreachable;
             } else {
@@ -311,7 +472,7 @@ pub const Machine = struct {
 
     pub fn dumpDebugData(self: *Machine) void {
         std.debug.print("Stack contents:\n", .{});
-        for (self.stack[0..self.sp]) |value| {
+        for (self.stack.items[0..self.stack.sp]) |value| {
             std.debug.print("  {s}\n", .{value.toString().data});
         }
 

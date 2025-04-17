@@ -1,4 +1,4 @@
-if __name__ == "__main__":
+def getData():
     constants = [
         Value(0, ValueType.INT),  # Constant 0 (0.0)
         Value(1, ValueType.INT),  # Constant 1 (1.0)
@@ -23,20 +23,22 @@ if __name__ == "__main__":
             code=[
                 Instruction(OpCode.LoadVar, 0),  # Load n
                 Instruction(OpCode.LoadConst, 0),  # Load constant 0
-                Instruction(OpCode.Eq, 0),  # If n == 0, jump to recursion
+                Instruction(OpCode.Eq),  # If n == 0, jump to recursion
                 Instruction(OpCode.Jif, 11),  # If n == 0, jump to recursion
 
                 Instruction(OpCode.LoadVar, 0),  # Load n
                 Instruction(OpCode.LoadConst, 1),  # Load constant 1
-                Instruction(OpCode.Sub, 0),  # n - 1
+                Instruction(OpCode.Sub),  # n - 1
                 Instruction(OpCode.Call, 1),  # Call factorial(n - 1)
                 Instruction(OpCode.LoadVar, 0),  # Load n
-                Instruction(OpCode.Mul, 0),  # n * factorial(n - 1)
-                Instruction(OpCode.Ret, 0),  # Return the result
+                Instruction(OpCode.Mul),  # n * factorial(n - 1)
+                Instruction(OpCode.Ret),  # Return the result
                 
                 Instruction(OpCode.LoadConst, 1),  # Load constant 1
-                Instruction(OpCode.Ret, 0),  # Return 1
+                Instruction(OpCode.Ret),  # Return 1
             ]
         )
     ]
-    genByteCode(constants, functions)
+    
+    return constants, functions
+  

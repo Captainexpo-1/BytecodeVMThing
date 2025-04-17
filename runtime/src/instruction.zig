@@ -25,6 +25,9 @@ pub const OpCode = enum(u8) {
     // Bitwise operations
     Shl,
     Shr,
+    BitAnd,
+    BitOr,
+    BitXor,
 
     // Comparison operations
     Eq,
@@ -45,6 +48,15 @@ pub const OpCode = enum(u8) {
     // Variables
     LoadVar,
     StoreVar,
+
+    // Pointer operations
+    LoadAddress, // Create a pointer to a variable
+    Deref, // Access the value a pointer points to
+    StoreDeref, // Update the value a pointer points to
+
+    // Heap
+    Alloc,
+    Free,
 
     // Cast operations
     CastToInt,

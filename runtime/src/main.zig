@@ -12,63 +12,15 @@ const _Instruction = @import("instruction.zig").OpCode;
 const Function = @import("bytecode.zig").Function;
 
 const Machine = @import("machine.zig").Machine;
+const MachineData = @import("machine.zig").MachineData;
 const OpCode = @import("instruction.zig").OpCode;
 
 const loadBytecode = @import("bytecodeloader.zig").loadBytecode;
 const loadBytecodeFromFile = @import("bytecodeloader.zig").loadBytecodeFromFile;
 
-fn testMachine() void {
-
-    // Example ByteCode and Machine initialization
-    var fn_1 = [_]Instruction{
-        Instruction.newInstruction(_Instruction.Nop, 0),
-        Instruction.newInstruction(_Instruction.LoadConst, 0),
-        Instruction.newInstruction(_Instruction.Call, 1),
-        Instruction.newInstruction(_Instruction.Add, 0),
-        Instruction.newInstruction(_Instruction.Halt, 0),
-    };
-    const fn_1_bytecode = fn_1[0..];
-
-    var machine = Machine.init(.Halted, 1024);
-    defer machine.deinit();
-
-    machine.addFunction(Function{
-        .arg_types = &.{},
-        .return_type = .None,
-        .code = fn_1_bytecode,
-    });
-
-    var fn_2 = [_]Instruction{
-        Instruction.newInstruction(_Instruction.LoadConst, 0),
-        Instruction.newInstruction(_Instruction.Ret, 0),
-    };
-
-    const fn_2_bytecode = fn_2[0..];
-
-    machine.addFunction(Function{
-        .arg_types = &.{},
-        .return_type = .Float,
-        .code = fn_2_bytecode,
-    });
-
-    machine.addConstant(Value.newValue(.{ .float = 42.0 }, .Float));
-    machine.addConstant(Value.newValue(.{ .float = 3.14 }, .Float));
-
-    // Run the machine
-    machine.prepare();
-    machine.run();
-
-    machine.dumpDebugData();
-}
-
-pub fn argsAsArray(allocator: std.mem.Allocator) ![][]u8 {
-    const args = try std.process.argsAlloc(allocator);
-    return args;
-}
-
 pub fn main() !void {
     const alloc = std.heap.page_allocator;
-    const args = try argsAsArray(alloc);
+    const args = try std.process.argsAlloc(alloc);
 
     const data = try loadBytecodeFromFile(args[1]);
 
