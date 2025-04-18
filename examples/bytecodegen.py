@@ -163,6 +163,7 @@ def getData():
                 Instruction(OpCode.LoadConst, 1), # Load constant 1 (10)
                 Instruction(OpCode.LoadAddress, 0),  # Load get pointer to variable 0
                 Instruction(OpCode.StoreDeref), # Store the value at the pointer
+                Instruction(OpCode.LoadVar, 0),
                 Instruction(OpCode.Halt)  # Halt the program
             ]
         ),

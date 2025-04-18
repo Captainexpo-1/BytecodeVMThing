@@ -15,6 +15,8 @@ const Machine = @import("machine.zig").Machine;
 const MachineData = @import("machine.zig").MachineData;
 const OpCode = @import("instruction.zig").OpCode;
 
+const FFI = @import("ffi.zig");
+
 const loadBytecode = @import("bytecodeloader.zig").loadBytecode;
 const loadBytecodeFromFile = @import("bytecodeloader.zig").loadBytecodeFromFile;
 
@@ -33,6 +35,9 @@ pub fn main() !void {
     for (data.constants) |const_val| {
         machine.addConstant(const_val);
     }
+
+    FFI.initFFI();
+
     machine.prepare();
 
     var timer = try std.time.Timer.start();

@@ -65,6 +65,9 @@ pub const OpCode = enum(u8) {
     // Load and halt
     LoadConst,
     Halt,
+
+    // FFI
+    CallFFI,
 };
 
 pub const Instruction = struct {

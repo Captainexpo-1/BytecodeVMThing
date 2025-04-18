@@ -278,4 +278,8 @@ pub const Value = struct {
         std.debug.print("Type mismatch in append {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
+
+    pub fn initNone() Value {
+        return newValue(_Value{ .none = {} }, .None);
+    }
 };

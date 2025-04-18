@@ -17,6 +17,8 @@ const Stack = @import("stack.zig").Stack;
 
 const Heap = @import("heap.zig").Heap;
 
+const FFI = @import("ffi.zig");
+
 pub const Machine = struct {
     current_callframe: ?*CallFrame,
     function_table: std.ArrayList(Function),
@@ -387,6 +389,28 @@ pub const Machine = struct {
                 // Free the allocated memory
                 self.heap.free(value.value.pointer) catch {
                     self.errorAndStop("Free: Failed to free memory");
+                    return;
+                };
+            },
+            OpCode.CallFFI => {
+                const ffi_name: Value = self.constants.items[instr.operand];
+                if (ffi_name.vtype != .String) {
+                    self.errorAndStop("CallFFI: Expected string constant");
+                    return;
+                }
+                const argc = FFI.getFFIArgLen(ffi_name.value.string) catch {
+                    self.errorAndStop("CallFFI: Failed to get argument count");
+                    return;
+                };
+                if (argc > self.stack.sp) {
+                    self.errorAndStop("CallFFI: Not enough arguments on stack");
+                    return;
+                }
+                const args = self.stack.items[self.stack.sp - argc .. self.stack.sp];
+                self.stack.sp -= argc; // Pop the arguments from the stack
+                const name = ffi_name.value.string.data;
+                FFI.callFFI(name, args) catch {
+                    self.errorAndStop("CallFFI: Failed to call FFI function");
                     return;
                 };
             },
