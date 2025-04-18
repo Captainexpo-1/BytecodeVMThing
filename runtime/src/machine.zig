@@ -19,6 +19,8 @@ const Heap = @import("heap.zig").Heap;
 
 const FFI = @import("ffi.zig");
 
+// Disable debug logging for performance
+
 pub const Machine = struct {
     current_callframe: ?*CallFrame,
     function_table: std.ArrayList(Function),
@@ -62,7 +64,7 @@ pub const Machine = struct {
     }
 
     fn executeInstruction(self: *Machine, instr: Instruction) void {
-        //std.debug.print("Executing instruction: {s}\n", .{instr.toString()});
+        //std.log.debug("Executing instruction: {s}", .{instr.toString()});
         self.instructions_executed += 1;
         switch (instr.instr) {
             OpCode.LoadConst => self.stack.push(self.constants.items[instr.operand]),
@@ -99,7 +101,7 @@ pub const Machine = struct {
             OpCode.Jnz => {
                 const value = self.stack.pop();
                 if (value.vtype == .Float and value.value.float != 0.0) {
-                    //std.debug.print("Jumping to {d}\n", .{instr.operand});
+                    //std.log.debug("Jumping to {d}", .{instr.operand});
                     self.current_callframe.?.pc = instr.operand;
                 }
             },
@@ -398,28 +400,38 @@ pub const Machine = struct {
                     self.errorAndStop("CallFFI: Expected string constant");
                     return;
                 }
-                const argc = FFI.getFFIArgLen(ffi_name.value.string) catch {
-                    self.errorAndStop("CallFFI: Failed to get argument count");
+                const name = ffi_name.value.string.data;
+                std.log.debug("Calling FFI function: '{s}'", .{name});
+                // debug the exact bytes to see what's in the variable
+                // Print the length to check if there are hidden characters
+                std.log.debug("name length: {d}", .{name.len});
+                const ffidata = FFI.FFI_mapping.get(name) orelse {
+                    self.errorAndStop("CallFFI: Function not found");
                     return;
                 };
+                const argc = ffidata.arg_types.len;
                 if (argc > self.stack.sp) {
                     self.errorAndStop("CallFFI: Not enough arguments on stack");
                     return;
                 }
                 const args = self.stack.items[self.stack.sp - argc .. self.stack.sp];
                 self.stack.sp -= argc; // Pop the arguments from the stack
-                const name = ffi_name.value.string.data;
-                FFI.callFFI(name, args) catch {
-                    self.errorAndStop("CallFFI: Failed to call FFI function");
+                const res = FFI.callFFI(name, args) catch |err| {
+                    self.errorAndStop(std.fmt.allocPrint(allocator, "CallFFI: Failed to call FFI function: {any}", .{err}) catch unreachable);
                     return;
                 };
+                if (ffidata.does_return_void) {
+                    // If the FFI function does not return a value, we don't push anything
+                    return;
+                }
+                self.stack.push(res);
             },
         }
     }
 
     pub fn errorAndStop(self: *Machine, message: []const u8) void {
         self.state = MachineState.Error;
-        std.debug.print("Machine encountered an error: {s}\n", .{message});
+        std.log.err("Machine encountered an error: {s}", .{message});
     }
 
     pub fn stop(self: *Machine) void {
@@ -439,7 +451,7 @@ pub const Machine = struct {
     }
 
     pub fn addFunction(self: *Machine, func: Function) void {
-        //std.debug.print("Adding: {s}\n", .{func.toString()});
+        //std.log.debug("Adding: {s}", .{func.toString()});
         self.function_table.append(func) catch {
             self.errorAndStop("Failed to add function");
         };
@@ -482,7 +494,7 @@ pub const Machine = struct {
             if (val.vtype == self.function_table.items[function_index].arg_types[i]) {
                 self.current_callframe.?.local_vars.append(val) catch unreachable;
             } else {
-                //std.debug.print("Argument type mismatch, expected {s} got {s}\n", .{ @tagName(self.function_table.items[function_index].arg_types[i]), @tagName(val.vtype) });
+                //std.log.debug("Argument type mismatch, expected {s} got {s}", .{ @tagName(self.function_table.items[function_index].arg_types[i]), @tagName(val.vtype) });
                 self.errorAndStop(
                     "",
                 );
@@ -495,20 +507,20 @@ pub const Machine = struct {
     }
 
     pub fn dumpDebugData(self: *Machine) void {
-        std.debug.print("Stack contents:\n", .{});
+        std.log.debug("Stack contents:", .{});
         for (self.stack.items[0..self.stack.sp]) |value| {
-            std.debug.print("  {s}\n", .{value.toString().data});
+            std.log.debug("  {s}", .{value.toString().data});
         }
 
         // Dump vars
-        std.debug.print("Local variables in current frame:\n", .{});
+        std.log.debug("Local variables in current frame:", .{});
         if (self.current_callframe) |cf| {
             for (cf.local_vars.items) |v| {
-                std.debug.print("  {s}\n", .{v.toString().data});
+                std.log.debug("  {s}", .{v.toString().data});
             }
         }
 
-        std.debug.print("Instructions executed: {d}\n", .{self.instructions_executed});
+        std.log.debug("Instructions executed: {d}", .{self.instructions_executed});
     }
 };
 

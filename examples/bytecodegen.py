@@ -74,6 +74,9 @@ class OpCode(Enum):
     # Load and halt
     LoadConst = _auto()
     Halt = _auto()
+    
+    # FFI operations
+    CallFFI = _auto()  # Call a foreign function interface (FFI) function
 
 globalnum = 0
 
@@ -149,8 +152,9 @@ def genByteCode(constants: List[Value], functions: List[Function], output_file='
 
 def getData():
     constants = [
-        Value(1, ValueType.INT),  # Constant 1 (1.0)
-        Value(10, ValueType.INT),  # Constant 2 (the input)
+        Value("Hello ", ValueType.STRING),  # Constant 1 (1.0)
+        Value("world!\n", ValueType.STRING),  # Constant 2 (the input)
+        Value("print", ValueType.STRING),  # Constant 3 (the function name)
     ]
     
     functions = [
@@ -158,12 +162,10 @@ def getData():
             arg_types=[],  # No arguments
             return_type=ValueType.NONE,  # Returns a float
             code = [
-                Instruction(OpCode.LoadConst, 0), # Load constant 0 (1)
-                Instruction(OpCode.StoreVar, 0),  # Store in variable 0
-                Instruction(OpCode.LoadConst, 1), # Load constant 1 (10)
-                Instruction(OpCode.LoadAddress, 0),  # Load get pointer to variable 0
-                Instruction(OpCode.StoreDeref), # Store the value at the pointer
-                Instruction(OpCode.LoadVar, 0),
+                Instruction(OpCode.LoadConst, 0),
+                Instruction(OpCode.LoadConst, 1),
+                Instruction(OpCode.Add),  # Add the two constants
+                Instruction(OpCode.CallFFI, 2),  # Load the function name
                 Instruction(OpCode.Halt)  # Halt the program
             ]
         ),

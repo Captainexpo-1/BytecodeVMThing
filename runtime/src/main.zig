@@ -36,7 +36,12 @@ pub fn main() !void {
         machine.addConstant(const_val);
     }
 
-    FFI.initFFI();
+    FFI.initFFI() catch {
+        std.log.err("Error initializing FFI\n", .{});
+        return;
+    };
+    defer FFI.deinitFFI();
+    FFI.debugPrintFFI();
 
     machine.prepare();
 
@@ -48,7 +53,7 @@ pub fn main() !void {
 
     machine.dumpDebugData();
 
-    std.debug.print("Took {d}ms, {d}ms per instruction\n", .{ len / 1e+6, len / @as(f64, @floatFromInt(machine.instructions_executed)) / 1e+6 });
+    std.log.debug("Took {d}ms, {d}ms per instruction", .{ len / 1e+6, len / @as(f64, @floatFromInt(machine.instructions_executed)) / 1e+6 });
 
     return;
 }

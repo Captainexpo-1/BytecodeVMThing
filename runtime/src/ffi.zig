@@ -4,21 +4,26 @@ const ValueType = @import("value.zig").ValueType;
 const Instruction = @import("instruction.zig").Instruction;
 
 // Define the function type
-const FFI_Fn = fn (args: []Value) Value;
+pub const FFIFn = *const fn (args: []Value) Value;
 
-const FFI_Data = struct {
-    name: []const u8,
-    args: []ValueType,
+pub const FFIData = struct {
+    arg_types: []const ValueType,
     ret: ValueType,
-    function: FFI_Fn,
+    function: FFIFn,
+    does_return_void: bool = true,
 
-    pub fn call(self: FFI_Data, args: []Value) !Value {
-        if (args.len != self.args.len) {
+    pub fn call(self: FFIData, args: []Value) !Value {
+        if (args.len != self.arg_types.len) {
             return error.InvalidArgumentCount;
         }
         // Validate argument types
         for (args, 0..) |arg, i| {
-            if (arg.type != self.args[i]) {
+            if (arg.vtype != self.arg_types[i]) {
+                std.log.err("FFI call error: Argument {d} type mismatch: expected {s}, got {s}\n", .{
+                    i,
+                    @tagName(self.arg_types[i]),
+                    @tagName(arg.vtype),
+                });
                 return error.InvalidArgumentType;
             }
         }
@@ -28,51 +33,41 @@ const FFI_Data = struct {
 };
 
 // Create a hashmap from string to function
-const FFI_mapping: std.AutoHashMap([]const u8, FFI_Data) = std.AutoHashMap([]const u8, FFI_Data).init(std.heap.page_allocator);
+pub var FFI_mapping = std.StringHashMap(FFIData).init(std.heap.page_allocator);
 
 pub fn print(args: []Value) Value {
     if (args.len == 0) {
-        std.debug.print("print: No arguments provided\n", .{});
-        return Value.newValue(.{ .none = null }, .None);
+        std.log.err("print: No arguments provided\n", .{});
+        return Value.newValue(.{ .none = {} }, .None);
     }
     // fmt string
     const str = args[0].toString().data;
 
-    // Collect arguments for formatting
-    var format_args: []anyopaque = &.{};
-    if (args.len > 1) {
-        format_args = args[1..].map(Value.toAnyOpaque);
-    }
     const stdout = std.io.getStdOut();
     // Print the formatted string
-    stdout.write(str) catch |err| {
-        std.debug.print("print: Error writing to stdout: {s}\n", .{err});
+    _ = stdout.writer().writeAll(str) catch {
+        std.log.err("print: Error writing to stdout\n", .{});
         return Value.initNone();
     };
 
     return Value.initNone();
 }
 
-pub fn registerFFI(name: []const u8, args: []ValueType, ret: ValueType, function: FFI_Fn) !void {
-    const ffi_data = FFI_Data{
-        .name = name,
-        .args = args,
+pub fn registerFFI(comptime name: []const u8, comptime args: []const ValueType, comptime ret: ValueType, comptime returns_void: bool, comptime function: FFIFn) !void {
+    // Make a copy of the args slice to own it
+
+    const ffi_data = FFIData{
+        .arg_types = args,
         .ret = ret,
         .function = function,
+        .does_return_void = returns_void,
     };
-    const result = FFI_mapping.put(name, ffi_data);
-    if (result) |err| {
-        return err;
-    }
+    try FFI_mapping.put(name, ffi_data);
 }
 
 pub fn getFFIArgLen(name: []const u8) !usize {
-    const ffi_data = FFI_mapping.get(name);
-    if (ffi_data) |data| {
-        return data.args.len;
-    } else {
-        return error.FunctionNotFound;
-    }
+    const ffi_data = FFI_mapping.get(name) orelse return error.FunctionNotFound;
+    return ffi_data.arg_types.len;
 }
 
 pub fn callFFI(name: []const u8, args: []Value) !Value {
@@ -86,5 +81,29 @@ pub fn callFFI(name: []const u8, args: []Value) !Value {
 
 pub fn initFFI() !void {
     // Register the print function
-    try registerFFI("print", &.{.String}, .None, print);
+    try registerFFI("print", &[_]ValueType{.String}, .None, true, print);
+}
+
+pub fn deinitFFI() void {
+    // No specific deinitialization needed for FFI,
+    // but we can clear the mapping if necessary.
+    FFI_mapping.deinit();
+}
+
+pub fn debugPrintFFI() void {
+    std.log.debug("Registered FFI functions:\n", .{});
+    var keyIter = FFI_mapping.keyIterator();
+    for (0..FFI_mapping.count()) |_| {
+        const key = keyIter.next() orelse break;
+        const value = FFI_mapping.get(key.*) orelse continue;
+        std.log.debug("  '{s}': args={d}, ret={s}, returns_void={}", .{
+            key.*,
+            value.arg_types.len,
+            @tagName(value.ret),
+            value.does_return_void,
+        });
+    }
+    if (FFI_mapping.count() == 0) {
+        std.log.debug("  No functions registered", .{});
+    }
 }

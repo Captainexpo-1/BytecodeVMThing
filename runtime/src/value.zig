@@ -52,7 +52,10 @@ pub const Value = struct {
         if (self.vtype == .Int and other.vtype == .Int) {
             return newValue(_Value{ .int = self.value.int + other.value.int }, .Int);
         }
-        std.debug.print("Type mismatch in add {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
+        if (self.vtype == .String and other.vtype == .String) {
+            return newValue(_Value{ .string = self.value.string.add(other.value.string) }, .String);
+        }
+        std.log.err("Type mismatch in add {s} and {s}", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return newValue(_Value{ .none = {} }, .None);
     }
 
@@ -63,7 +66,7 @@ pub const Value = struct {
         if (self.vtype == .Int and other.vtype == .Int) {
             return newValue(_Value{ .int = self.value.int - other.value.int }, .Int);
         }
-        std.debug.print("Type mismatch in sub {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
+        std.log.err("Type mismatch in sub {s} and {s}", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
 
@@ -74,26 +77,26 @@ pub const Value = struct {
         if (self.vtype == .Int and other.vtype == .Int) {
             return newValue(_Value{ .int = self.value.int * other.value.int }, .Int);
         }
-        std.debug.print("Type mismatch in mul {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
+        std.log.err("Type mismatch in mul {s} and {s}", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
 
     pub fn div(self: Value, other: Value) Value {
         if (self.vtype == .Float and other.vtype == .Float) {
             if (other.value.float == 0.0) {
-                std.debug.print("Division by zero\n", .{});
+                std.log.err("Division by zero", .{});
                 return Value.nullValue();
             }
             return newValue(_Value{ .float = self.value.float / other.value.float }, .Float);
         }
         if (self.vtype == .Int and other.vtype == .Int) {
             if (other.value.int == 0) {
-                std.debug.print("Division by zero\n", .{});
+                std.log.err("Division by zero", .{});
                 return Value.nullValue();
             }
             return newValue(_Value{ .int = @divFloor(self.value.int, other.value.int) }, .Int);
         }
-        std.debug.print("Type mismatch in div {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
+        std.log.err("Type mismatch in div {s} and {s}", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
 
@@ -159,7 +162,7 @@ pub const Value = struct {
         if (self.vtype == .Int and b.vtype == .Int) {
             return self.value.int > b.value.int;
         }
-        std.debug.print("Type mismatch in gt {s} and {s}\n", .{ @tagName(self.vtype), @tagName(b.vtype) });
+        std.log.err("Type mismatch in gt {s} and {s}", .{ @tagName(self.vtype), @tagName(b.vtype) });
         return false;
     }
 
@@ -170,7 +173,7 @@ pub const Value = struct {
         if (self.vtype == .Int and b.vtype == .Int) {
             return self.value.int < b.value.int;
         }
-        std.debug.print("Type mismatch in lt {s} and {s}\n", .{ @tagName(self.vtype), @tagName(b.vtype) });
+        std.log.err("Type mismatch in lt {s} and {s}", .{ @tagName(self.vtype), @tagName(b.vtype) });
         return false;
     }
 
@@ -275,7 +278,7 @@ pub const Value = struct {
             self.value.list.append(other);
             return self;
         }
-        std.debug.print("Type mismatch in append {s} and {s}\n", .{ @tagName(self.vtype), @tagName(other.vtype) });
+        std.log.err("Type mismatch in append {s} and {s}", .{ @tagName(self.vtype), @tagName(other.vtype) });
         return Value.nullValue();
     }
 

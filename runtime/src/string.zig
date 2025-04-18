@@ -10,13 +10,9 @@ pub const String = struct {
     pub fn add(self: String, other: String) String {
         var buffer = std.ArrayList(u8).init(std.heap.page_allocator);
         defer buffer.deinit();
-        if (buffer.appendSlice(self.data) == null) {
-            return String{ .data = "" };
-        }
-        if (buffer.appendSlice(other.data) == null) {
-            return String{ .data = "" };
-        }
-        return String{ .data = buffer.toOwnedSlice() };
+        buffer.appendSlice(self.data) catch unreachable;
+        buffer.appendSlice(other.data) catch unreachable;
+        return String{ .data = buffer.toOwnedSlice() catch unreachable };
     }
 
     pub fn fromInt(value: i64) String {

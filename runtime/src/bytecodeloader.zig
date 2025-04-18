@@ -20,7 +20,7 @@ fn readFunction(data: []const u8, pos: *usize) !Function {
     pos.* += 1;
     const num_args = data[pos.*];
     pos.* += 1;
-    std.debug.print("Function return type: {d}, num_args: {d}\n", .{ @as(u8, @intFromEnum(return_type)), num_args });
+    std.log.debug("Function return type: {d}, num_args: {d}", .{ @as(u8, @intFromEnum(return_type)), num_args });
 
     var arg_types = std.ArrayList(ValueType).init(allocator);
 
@@ -29,12 +29,12 @@ fn readFunction(data: []const u8, pos: *usize) !Function {
         pos.* += 1;
         try arg_types.append(arg_type);
     }
-    std.debug.print("ptr: {d}\n", .{pos.*});
+    std.log.debug("ptr: {d}", .{pos.*});
 
     const num_instr_buffer = data[pos.* .. pos.* + 2];
     if (pos.* + 2 > data.len) return ByteCodeParseError.InvalidBytecode;
     const num_instructions = std.mem.readInt(u16, @ptrCast(&num_instr_buffer[0]), std.builtin.Endian.little);
-    std.debug.print("Number of instructions: {d}\n", .{num_instructions});
+    std.log.debug("Number of instructions: {d}", .{num_instructions});
     pos.* += @sizeOf(u16);
     var instructions = std.ArrayList(Instruction).init(allocator);
 
@@ -44,7 +44,7 @@ fn readFunction(data: []const u8, pos: *usize) !Function {
         const arg = data[pos.*];
         pos.* += 1;
         const instr = Instruction.newInstruction(instr_type, arg);
-        std.debug.print("Instruction: {s}\n", .{instr.toString()});
+        std.log.debug("Instruction: {s}", .{instr.toString()});
         try instructions.append(instr);
     }
 
@@ -81,11 +81,22 @@ fn readValue(data: []const u8, pos: *usize) !Value {
         .String => {
             if (pos.* >= data.len) return ByteCodeParseError.InvalidBytecode;
 
-            const strlen = std.mem.readInt(u32, @ptrCast(&data[pos.*]), std.builtin.Endian.little);
+            // First read the total length
+            const total_len = std.mem.readInt(u32, @ptrCast(&data[pos.*]), std.builtin.Endian.little);
             pos.* += @sizeOf(u32);
-            if (pos.* + strlen > data.len) return ByteCodeParseError.InvalidBytecode;
-            const str_value = String{ .data = data[pos.* + 1 .. pos.* + strlen] };
-            pos.* += strlen;
+
+            if (pos.* + total_len > data.len) return ByteCodeParseError.InvalidBytecode;
+
+            // Then read the actual string length (which is embedded inside)
+            const str_len = std.mem.readInt(u32, @ptrCast(&data[pos.*]), std.builtin.Endian.little);
+            pos.* += @sizeOf(u32);
+
+            if (pos.* + str_len > data.len) return ByteCodeParseError.InvalidBytecode;
+
+            // Now get the actual string data (without any length prefixes)
+            const str_value = String{ .data = data[pos.* .. pos.* + str_len] };
+            pos.* += str_len;
+
             return Value.newValue(.{ .string = str_value }, .String);
         },
         .Bool => {
@@ -97,7 +108,7 @@ fn readValue(data: []const u8, pos: *usize) !Value {
         .List => unreachable,
         .None => return Value.newValue(.{ .none = {} }, .None),
         else => {
-            std.debug.print("Unimplemented value type: {d}\n", .{@intFromEnum(value_type)});
+            std.log.debug("Unimplemented value type: {d}", .{@intFromEnum(value_type)});
             return ByteCodeParseError.Unimplemented;
         },
     }
@@ -117,12 +128,12 @@ pub fn loadBytecode(data: []const u8) !MachineData {
     }
 
     // Print loaded constants for debugging
-    std.debug.print("Loaded constants:\n", .{});
+    std.log.debug("Loaded constants:", .{});
     for (constants) |v| {
-        std.debug.print("  Constant: {s}\n", .{v.toString().data});
+        std.log.debug("  Constant: {s}", .{v.toString().data});
     }
     const num_functions = data[pos];
-    std.debug.print("Number of functions: {d}\n", .{num_functions});
+    std.log.debug("Number of functions: {d}", .{num_functions});
     pos += 1;
 
     var functions = allocator.alloc(Function, num_functions) catch return ByteCodeParseError.InvalidBytecode;
@@ -130,7 +141,7 @@ pub fn loadBytecode(data: []const u8) !MachineData {
         const function = try readFunction(data, &pos);
         functions[i] = function;
     }
-    std.debug.print("Loaded functions:\n", .{});
+    std.log.debug("Loaded functions:", .{});
     return MachineData{
         .functions = functions,
         .constants = constants,
