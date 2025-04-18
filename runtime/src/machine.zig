@@ -122,7 +122,7 @@ pub const Machine = struct {
                 }
 
                 // Pop the current frame
-                var old_frame = self.call_stack.pop() orelse unreachable;
+                var old_frame = self.call_stack.pop();
                 old_frame.deinit();
 
                 // Restore previous frame
