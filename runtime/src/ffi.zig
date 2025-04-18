@@ -53,6 +53,19 @@ pub fn print(args: []Value) Value {
     return Value.initNone();
 }
 
+pub fn intToString(args: []Value) Value {
+    if (args.len == 0) {
+        std.log.err("intToString: No arguments provided\n", .{});
+        return Value.newValue(.{ .none = {} }, .None);
+    }
+    if (args.len > 1) {
+        std.log.err("intToString: Too many arguments provided\n", .{});
+        return Value.newValue(.{ .none = {} }, .None);
+    }
+    // Convert the integer to a string
+    return Value.newValue(.{ .string = args[0].toString() }, .String);
+}
+
 pub fn registerFFI(comptime name: []const u8, comptime args: []const ValueType, comptime ret: ValueType, comptime returns_void: bool, comptime function: FFIFn) !void {
     // Make a copy of the args slice to own it
 
@@ -82,6 +95,7 @@ pub fn callFFI(name: []const u8, args: []Value) !Value {
 pub fn initFFI() !void {
     // Register the print function
     try registerFFI("print", &[_]ValueType{.String}, .None, true, print);
+    try registerFFI("intToString", &[_]ValueType{.Int}, .String, false, intToString);
 }
 
 pub fn deinitFFI() void {
@@ -90,7 +104,7 @@ pub fn deinitFFI() void {
     FFI_mapping.deinit();
 }
 
-pub fn debugPrintFFI() void {
+pub fn printFFIRegistry() void {
     std.log.debug("Registered FFI functions:\n", .{});
     var keyIter = FFI_mapping.keyIterator();
     for (0..FFI_mapping.count()) |_| {

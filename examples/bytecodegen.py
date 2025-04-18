@@ -155,6 +155,8 @@ def getData():
         Value("Hello ", ValueType.STRING),  # Constant 1 (1.0)
         Value("world!\n", ValueType.STRING),  # Constant 2 (the input)
         Value("print", ValueType.STRING),  # Constant 3 (the function name)
+        Value(10, ValueType.INT),  # Constant 4 (the integer value)
+        Value("intToString", ValueType.STRING),  # Constant 5 (the function name)
     ]
     
     functions = [
@@ -163,7 +165,10 @@ def getData():
             return_type=ValueType.NONE,  # Returns a float
             code = [
                 Instruction(OpCode.LoadConst, 0),
+                Instruction(OpCode.LoadConst, 3),
+                Instruction(OpCode.CallFFI, 4),
                 Instruction(OpCode.LoadConst, 1),
+                Instruction(OpCode.Add),  # Add the two constants
                 Instruction(OpCode.Add),  # Add the two constants
                 Instruction(OpCode.CallFFI, 2),  # Load the function name
                 Instruction(OpCode.Halt)  # Halt the program

@@ -41,7 +41,7 @@ pub fn main() !void {
         return;
     };
     defer FFI.deinitFFI();
-    FFI.debugPrintFFI();
+    FFI.printFFIRegistry();
 
     machine.prepare();
 
