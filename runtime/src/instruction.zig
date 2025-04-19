@@ -1,5 +1,4 @@
 const std = @import("std");
-const Value = @import("value.zig").Value;
 
 pub const OpCode = enum(u8) {
     // No operation
@@ -9,64 +8,86 @@ pub const OpCode = enum(u8) {
     Dup,
     Swap,
 
-    // Arithmetic operations
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
+    // Arithmetic (typed)
+    AddI,
+    AddF,
+    SubI,
+    SubF,
+    MulI,
+    MulF,
+    DivI,
+    DivF,
+    ModI,
 
-    // Logical operations
-    And,
-    Or,
-    Not,
-    Xor,
+    // Logical (typed)
+    AndB, // Boolean AND
+    OrB,
+    NotB,
+    XorB,
 
-    // Bitwise operations
-    Shl,
-    Shr,
-    BitAnd,
-    BitOr,
-    BitXor,
+    // Bitwise (typed, usually int)
+    ShlI,
+    ShrI,
+    BitAndI,
+    BitOrI,
+    BitXorI,
 
-    // Comparison operations
-    Eq,
-    Neq,
-    Gt,
-    Lt,
-    Ge,
-    Le,
+    // Comparison (typed)
+    EqI,
+    EqF,
+    NeqI,
+    NeqF,
+    GtI,
+    GtF,
+    LtI,
+    LtF,
+    GeI,
+    GeF,
+    LeI,
+    LeF,
 
     // Control flow
-    Jmp,
-    Jz,
-    Jnz,
-    Jif,
-    Call,
-    Ret,
+    Jmp, // Unconditional jump
+    Jz, // Jump if zero (int or float == 0)
+    Jnz, // Jump if nonzero
+    Jif, // Jump if top of stack is true (bool)
+    Call, // Call function at address
+    Ret, // Return from function
 
-    // Variables
-    LoadVar,
-    StoreVar,
+    // Variable stack frame access
+    LoadVarI,
+    LoadVarF,
+    StoreVarI,
+    StoreVarF,
 
-    // Pointer operations
-    LoadAddress, // Create a pointer to a variable
-    Deref, // Access the value a pointer points to
-    StoreDeref, // Update the value a pointer points to
+    // Pointer operations (typed)
+    LoadAddrI,
+    DerefI,
+    StoreDerefI,
 
-    // Heap
-    Alloc,
-    Free,
+    LoadAddrF,
+    DerefF,
+    StoreDerefF,
 
-    // Cast operations
-    CastToInt,
-    CastToFloat,
+    // Heap (typed)
+    AllocI,
+    AllocF,
+    FreeI,
+    FreeF,
 
-    // Load and halt
-    LoadConst,
+    // Casts (typed)
+    CastIToF,
+    CastFToI,
+
+    // Constants
+    LoadConstI,
+    LoadConstF,
+    LoadConstB, // if you're storing bools too
+
+    // Halt VM
     Halt,
 
-    // FFI
+    // Foreign function interface
     CallFFI,
 };
 

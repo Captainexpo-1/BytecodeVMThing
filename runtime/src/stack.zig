@@ -1,51 +1,46 @@
-const Value = @import("value.zig").Value;
-const _Value = @import("value.zig")._Value;
-
 const std = @import("std");
+const StackWord = @import("global.zig").StackWord;
+
+pub const STACK_SIZE: usize = 1024;
 
 pub const Stack = struct {
-    items: []Value,
+    items: []StackWord,
     sp: usize,
     allocator: std.mem.Allocator,
-    pub fn init(size: usize, alloc: std.mem.Allocator) Stack {
+
+    /// Create a stack capable of holding `size` words
+    pub fn init(allocator: std.mem.Allocator) Stack {
+        const items = allocator.alloc(StackWord, STACK_SIZE) catch unreachable;
         return Stack{
-            .items = alloc.alloc(Value, size) catch unreachable,
+            .items = items,
             .sp = 0,
-            .allocator = alloc,
+            .allocator = allocator,
         };
     }
 
-    pub fn pop(self: *Stack) Value {
-        if (self.sp == 0) {
-            return Value.newValue(_Value{ .none = {} }, .None); // Return a default value if stack is empty
+    /// Push a word onto the stack (no-op on overflow)
+    pub fn push(self: *Stack, value: StackWord) void {
+        if (self.sp < self.items.len) {
+            self.items[self.sp] = value;
+            self.sp += 1;
         }
+    }
+
+    /// Pop a word from the stack, returning 0 on underflow
+    pub fn pop(self: *Stack) StackWord {
+        if (self.sp == 0) return 0;
         self.sp -= 1;
         return self.items[self.sp];
     }
 
-    pub fn push(self: *Stack, value: Value) void {
-        if (self.sp >= self.items.len) {
-            return; // Stack overflow, handle as needed
-        }
-        self.items[self.sp] = value;
-        self.sp += 1;
+    /// Peek at the word `offset` from the top (0 = top)
+    pub fn peek(self: *Stack, offset: usize) StackWord {
+        if (offset >= self.sp) return 0;
+        return self.items[self.sp - 1 - offset];
     }
 
+    /// Free the stack's backing storage
     pub fn deinit(self: *Stack) void {
         self.allocator.free(self.items);
-    }
-
-    pub fn get(self: *Stack, index: usize) Value {
-        if (index >= self.sp) {
-            return Value.newValue(_Value{ .none = {} }, .None);
-        }
-        return self.items[index];
-    }
-
-    pub fn set(self: *Stack, index: usize, value: Value) void {
-        if (index >= self.sp) {
-            return; // Handle as needed
-        }
-        self.items[index] = value;
     }
 };

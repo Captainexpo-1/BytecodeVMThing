@@ -2,11 +2,10 @@ const std = @import("std");
 
 const Instruction = @import("instruction.zig").Instruction;
 
-const Value = @import("value.zig").Value;
 const ValueType = @import("value.zig").ValueType;
 
 pub const Function = struct {
-    arg_types: []ValueType,
+    arg_types: []const ValueType,
     return_type: ValueType,
     code: []Instruction,
     pub fn toString(self: Function) []const u8 {
