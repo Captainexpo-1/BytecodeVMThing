@@ -80,9 +80,7 @@ pub const OpCode = enum(u8) {
     CastFToI,
 
     // Constants
-    LoadConstI,
-    LoadConstF,
-    LoadConstB, // if you're storing bools too
+    LoadConst,
 
     // Halt VM
     Halt,

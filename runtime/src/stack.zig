@@ -35,6 +35,13 @@ pub const Stack = struct {
         return self.items[self.sp];
     }
 
+    pub fn popN(self: *Stack, n: usize) []StackWord {
+        if (self.sp < n) return self.items[0..0];
+        const result = self.items[self.sp - n .. self.sp];
+        self.sp -= n;
+        return result;
+    }
+
     /// Peek at the word `offset` from the top (0 = top)
     pub fn peek(self: *Stack, offset: usize) StackWord {
         if (offset >= self.sp) return 0;

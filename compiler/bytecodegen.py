@@ -90,9 +90,8 @@ class OpCode(Enum):
     CastFToI = _auto()
 
     # Constants
-    LoadConstI = _auto()
-    LoadConstF = _auto()
-    LoadConstB = _auto()  # Load boolean constant
+    LoadConst = _auto()
+
     
     # Halt VM
     Halt = _auto()
@@ -181,30 +180,58 @@ def genByteCode(constants: List[Value], functions: List[Function], output_file='
 
 
 def getData():
-    constants = [
-        Value(5, ValueType.INT),  # Constant 1 (1.0)
-        Value(10, ValueType.INT),  # Constant 4 (the integer value)
-        Value(25, ValueType.INT),  # Constant 5 (the integer value)
+
+    def ffi(name: str) -> int:
+        # name = name of the foreign function
+        # returns the index of the foreign function
+        
+        for i, ffi_name in enumerate(FFI):
+            if ffi_name == name:
+                return i
+        raise ValueError(f"Foreign function '{name}' not found")
+    
+    def const(name: str) -> int:
+        # name = name of the constant
+        # returns the index of the constant
+        
+        for i, (const_name, const_value) in enumerate(constants):
+            if const_name == name:
+                return i
+        raise ValueError(f"Constant '{name}' not found")
+    
+    FFI = [
+        "print",
+        "str_concat",
+        "input",
     ]
+    
+    constants = [
+        ("prompt",Value("Hello! What is your name?\n", ValueType.STRING)),
+        ("compliment",Value(" is a really good name!\n", ValueType.STRING)),
+        ("str_type",Value(ValueType.STRING.value, ValueType.INT)), 
+    ]
+    
 
     functions = [
         Function(
             arg_types=[],  # No arguments
             return_type=ValueType.NONE,  # Returns a float
-            code=[
-                Instruction(OpCode.LoadConstI, 0),
-                Instruction(OpCode.LoadConstI, 1),  # Store the array in variable 0
-                Instruction(OpCode.AddI, 0),
-                Instruction(OpCode.StoreVarI, 0),  # Store the result in variable 0
-                Instruction(OpCode.LoadConstI, 2),  # Load the result from variable 0
-                Instruction(OpCode.LoadAddrI, 0),  # Load the address of variable 0
-                Instruction(OpCode.StoreDerefI, 0),
+            code = [
+                Instruction(OpCode.LoadConst, const("prompt")),  # Load constant 0 (5.0)
+                Instruction(OpCode.LoadConst, const("str_type")),  # Load constant 1 (5.0)
+                Instruction(OpCode.CallFFI, ffi("print")),  # Call foreign function
+            
+                Instruction(OpCode.CallFFI, ffi("input")),  # Call foreign function
+                Instruction(OpCode.LoadConst, const("compliment")),  # Load constant 1 (5.0)
+                Instruction(OpCode.CallFFI, ffi("str_concat")),  # Call foreign function
+                Instruction(OpCode.LoadConst, const("str_type")),  # Load constant 1 (5.0)
+                Instruction(OpCode.CallFFI, ffi("print")),  # Call foreign function
                 Instruction(OpCode.Halt)  # Halt the program
             ]
         ),
     ]
-
-    return constants, functions
+    
+    return [val for name, val in constants], functions
 
 
 if __name__ == "__main__":

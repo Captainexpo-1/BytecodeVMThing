@@ -8,6 +8,8 @@ const Heap = @import("heap.zig").Heap;
 const global = @import("global.zig");
 const StackWord = @import("global.zig").StackWord;
 
+const FFI = @import("ffi.zig");
+
 const allocator = std.heap.page_allocator;
 
 /// A machine-word storing raw bits for ints, floats, and bools
@@ -56,9 +58,7 @@ pub const Machine = struct {
         switch (instr.instr) {
 
             // Constants
-            OpCode.LoadConstI => self.stack.push(self.constants.items[instr.operand]),
-            OpCode.LoadConstF => self.stack.push(self.constants.items[instr.operand]),
-            OpCode.LoadConstB => self.stack.push(self.constants.items[instr.operand]),
+            OpCode.LoadConst => self.stack.push(self.constants.items[instr.operand]),
 
             // Arithmetic Int
             OpCode.AddI => {
@@ -356,6 +356,18 @@ pub const Machine = struct {
                 const v = @as(f64, @bitCast(self.stack.pop()));
                 self.stack.push(@as(StackWord, @bitCast(@as(i64, @intFromFloat(v)))));
             },
+            OpCode.CallFFI => {
+                const func_index = instr.operand;
+                const func: FFI.FFIData = FFI.FFI_mapping_linear.items[func_index];
+                const args_arr: []StackWord = self.stack.popN(func.arg_types.len);
+
+                const res: StackWord = func.call(args_arr) catch |err| {
+                    self.errorAndStop(std.fmt.allocPrint(allocator, "FFI call failed: {?}", .{err}) catch "Error");
+                    return;
+                };
+
+                self.stack.push(res);
+            },
             OpCode.Halt => self.stop(),
             else => self.errorAndStop("Unimplemented opcode"),
         }
@@ -374,7 +386,15 @@ pub const Machine = struct {
             return;
         };
         self.current_callframe = &self.call_stack.items[self.call_stack.items.len - 1];
-        // Pop args if any (omitted)
+
+        const func = self.function_table.items[idx];
+        for (0..func.arg_types.len) |i| {
+            const arg = self.stack.pop();
+            while (i >= self.current_callframe.?.local_vars.items.len) {
+                self.current_callframe.?.local_vars.append(0) catch {};
+            }
+            self.current_callframe.?.local_vars.items[i] = arg;
+        }
     }
 
     pub fn errorAndStop(self: *Machine, msg: []const u8) void {
@@ -427,6 +447,20 @@ pub const Machine = struct {
     pub fn loadFromMachineData(self: *Machine, data: MachineData) void {
         self.addConstants(data.constants);
         for (data.functions) |f| self.addFunction(f);
+    }
+
+    pub fn printDebugData(self: *Machine) void {
+        std.log.debug("Machine state: {s}", .{self.state});
+        std.log.debug("Call stack:", .{});
+        for (self.call_stack.items) |cf| {
+            std.log.debug("  Call frame: {d}", .{cf.function_index});
+            std.log.debug("    PC: {d}", .{cf.pc});
+            std.log.debug("    Local vars: {d}", .{cf.local_vars.items.len});
+        }
+        std.log.debug("Stack:", .{});
+        for (self.stack.items[0..self.stack.sp]) |v| {
+            std.log.debug("  Stack word: {d}", .{@as(i64, @bitCast(v))});
+        }
     }
 };
 

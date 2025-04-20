@@ -14,6 +14,8 @@ const ValueType = @import("value.zig").ValueType;
 const Global = @import("global.zig");
 const StackWord = Global.StackWord;
 
+const FFI = @import("ffi.zig");
+
 const loadBytecode = @import("bytecodeloader.zig").loadBytecodeFromFile;
 
 pub fn main() !void {
@@ -34,6 +36,14 @@ pub fn main() !void {
         std.log.err("Failed to load bytecode: {?}", .{err});
         return err;
     };
+
+    FFI.initFFI() catch |err| {
+        std.log.err("Failed to initialize FFI: {?}", .{err});
+        return err;
+    };
+    defer FFI.deinitFFI();
+
+    FFI.printFFIRegistry();
 
     var machine = Machine.init(.Halted);
     defer machine.deinit();

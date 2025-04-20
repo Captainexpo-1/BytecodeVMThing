@@ -83,23 +83,24 @@ fn readValue(data: []const u8, pos: *usize) !std.meta.Tuple(&[_]type{ StackWord,
         .String => {
             if (pos.* >= data.len) return ByteCodeParseError.InvalidBytecode;
 
-            // First read the total length
+            // Read total length
             const total_len = std.mem.readInt(u32, @ptrCast(&data[pos.*]), std.builtin.Endian.little);
             pos.* += @sizeOf(u32);
 
             if (pos.* + total_len > data.len) return ByteCodeParseError.InvalidBytecode;
 
-            // Then read the actual string length (which is embedded inside)
+            // Read string length
             const str_len = std.mem.readInt(u32, @ptrCast(&data[pos.*]), std.builtin.Endian.little);
             pos.* += @sizeOf(u32);
 
             if (pos.* + str_len > data.len) return ByteCodeParseError.InvalidBytecode;
 
-            // Now get the actual string data (without any length prefixes)
-            const str_value = String{ .data = data[pos.* .. pos.* + str_len] };
-            pos.* += str_len;
+            // Allocate and initialize the string directly
+            const str_pointer = try allocator.create(String);
+            str_pointer.data = data[pos.* .. pos.* + str_len];
+            str_pointer.len = str_len;
 
-            const str_pointer = &str_value;
+            pos.* += str_len;
 
             ret = Global.toStackWord(@as(usize, @intFromPtr(str_pointer)));
         },

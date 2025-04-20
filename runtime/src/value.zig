@@ -17,11 +17,11 @@ pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.All
     switch (val_type) {
         .Int => {
             const intval = Global.fromStackWord(i64, val);
-            return String{ .data = try std.fmt.allocPrint(allocator, "{d}", .{intval}) };
+            return String.new(try std.fmt.allocPrint(allocator, "{d}", .{intval}));
         },
         .Float => {
             const floatval = Global.fromStackWord(f64, val);
-            return String{ .data = try std.fmt.allocPrint(allocator, "{d}", .{floatval}) };
+            return String.new(try std.fmt.allocPrint(allocator, "{d}", .{floatval}));
         },
         .String => {
             const str_pointer = @as(*String, @ptrFromInt(@as(usize, val)));
@@ -29,8 +29,8 @@ pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.All
         },
         .Bool => {
             const boolval = Global.fromStackWord(u64, val) != 0;
-            return String{ .data = try std.fmt.allocPrint(allocator, "{any}", .{boolval}) };
+            return String.new(try std.fmt.allocPrint(allocator, "{any}", .{boolval}));
         },
-        else => return String{ .data = "Unsupported type" },
+        else => return String.new("Unsupported type"),
     }
 }
