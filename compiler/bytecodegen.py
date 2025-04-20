@@ -220,7 +220,7 @@ def getData():
                 Instruction(OpCode.LoadConst, const("prompt")),  # Load constant 0 (5.0)
                 Instruction(OpCode.LoadConst, const("str_type")),  # Load constant 1 (5.0)
                 Instruction(OpCode.CallFFI, ffi("print")),  # Call foreign function
-            
+        
                 Instruction(OpCode.CallFFI, ffi("input")),  # Call foreign function
                 Instruction(OpCode.LoadConst, const("compliment")),  # Load constant 1 (5.0)
                 Instruction(OpCode.CallFFI, ffi("str_concat")),  # Call foreign function

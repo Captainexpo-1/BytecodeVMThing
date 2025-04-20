@@ -1,96 +1,52 @@
 const std = @import("std");
-const fmt = std.fmt;
-pub const String = struct {
-    data: []const u8,
-    len: usize,
+const Global = @import("global.zig");
+const StackWord = Global.StackWord;
 
-    pub fn new(data: []const u8) String {
-        return String{ .data = data, .len = data.len };
+pub fn concat(str1: []const u8, str2: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+    var buffer = try allocator.alloc(u8, str1.len + str2.len);
+    @memcpy(buffer[0..str1.len], str1);
+    @memcpy(buffer[str1.len..], str2);
+    return buffer;
+}
+
+pub fn fromInt(value: i64, allocator: std.mem.Allocator) ![]const u8 {
+    return try std.fmt.allocPrint(allocator, "{d}", .{value});
+}
+
+pub fn fromFloat(value: f64, allocator: std.mem.Allocator) ![]const u8 {
+    return try std.fmt.allocPrint(allocator, "{d}", .{value});
+}
+
+pub fn fromBool(value: bool, allocator: std.mem.Allocator) ![]const u8 {
+    return try allocator.dupe(u8, if (value) "true" else "false");
+}
+
+pub fn isEqual(str1: []const u8, str2: []const u8) bool {
+    return std.mem.eql(u8, str1, str2);
+}
+
+pub fn substring(str: []const u8, start: usize, end: usize) ?[]const u8 {
+    if ((start >= str.len) or (end > str.len) or (start >= end)) {
+        return null;
     }
+    return str[start..end];
+}
 
-    pub fn alloc(self: String, allocator: std.mem.Allocator) !*String {
-        const s = try allocator.create(String);
-        s.* = self;
-        return s;
-    }
+pub fn split(str: []const u8, delimiter: u8, allocator: std.mem.Allocator) ![][]const u8 {
+    var list = std.ArrayList([]const u8).init(allocator);
+    defer list.deinit();
 
-    pub fn add(self: String, other: String) String {
-        var buffer = std.ArrayList(u8).init(std.heap.page_allocator);
-        defer buffer.deinit();
-        buffer.appendSlice(self.data) catch {
-            std.debug.print("Error appending slice\n", .{});
-            return String{ .data = "", .len = 0 };
-        };
-        buffer.appendSlice(other.data) catch {
-            std.debug.print("Error appending slice\n", .{});
-            return String{ .data = "", .len = 0 };
-        };
-        return String{ .data = buffer.toOwnedSlice() catch {
-            std.debug.print("Error converting to owned slice\n", .{});
-            return String{ .data = "", .len = 0 };
-        }, .len = buffer.items.len };
-    }
-
-    pub fn fromInt(value: i64) String {
-        const s = std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{value}) catch "";
-        return String{ .data = s, .len = s.len };
-    }
-
-    pub fn fromFloat(value: f64) String {
-        const s = std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{value}) catch "";
-        return String{ .data = s, .len = s.len };
-    }
-
-    pub fn fromBool(value: bool) String {
-        return String{ .data = if (value) "true" else "false", .len = if (value) 4 else 5 };
-    }
-
-    pub fn toSlice(self: String) []const u8 {
-        return self.data;
-    }
-
-    pub fn isEmpty(self: String) bool {
-        return self.len == 0;
-    }
-
-    pub fn isEqual(self: String, other: String) bool {
-        if (self.len != other.len) {
-            return false;
+    var start: usize = 0;
+    for (str, 0..) |c, i| {
+        if (c == delimiter) {
+            try list.append(try allocator.dupe(u8, str[start..i]));
+            start = i + 1;
         }
-        return std.mem.eql(u8, self.data, other.data);
     }
 
-    pub fn at(self: String, index: usize) ?u8 {
-        if (index >= self.len) {
-            return null;
-        }
-        return self.data[index];
+    if (start < str.len) {
+        try list.append(try allocator.dupe(u8, str[start..]));
     }
 
-    pub fn substring(self: String, start: usize, end: usize) ?String {
-        if (start >= self.len or end > self.len or start >= end) {
-            return null;
-        }
-        return String{ .data = self.data[start..end] };
-    }
-
-    pub fn split(self: String, delimiter: u8) []String {
-        var list = std.ArrayList(String).init(std.heap.page_allocator);
-        defer list.deinit();
-        var start = 0;
-        var i: usize = 0;
-        for (self.data) |c| {
-            if (c == delimiter) {
-                if (start < i) {
-                    _ = list.append(String{ .data = self.data[start..i], .len = i - start });
-                }
-                start = i + 1;
-            }
-            i += 1;
-        }
-        if (start < self.len) {
-            _ = list.append(String{ .data = self.data[start..], .len = self.len - start });
-        }
-        return list.toOwnedSlice();
-    }
-};
+    return list.toOwnedSlice();
+}

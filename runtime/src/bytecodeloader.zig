@@ -1,5 +1,5 @@
 const std = @import("std");
-const String = @import("string.zig").String;
+const stringutil = @import("string.zig");
 const ValueType = @import("value.zig").ValueType;
 const Instruction = @import("instruction.zig").Instruction;
 const OpCode = @import("instruction.zig").OpCode;
@@ -95,14 +95,18 @@ fn readValue(data: []const u8, pos: *usize) !std.meta.Tuple(&[_]type{ StackWord,
 
             if (pos.* + str_len > data.len) return ByteCodeParseError.InvalidBytecode;
 
-            // Allocate and initialize the string directly
-            const str_pointer = try allocator.create(String);
-            str_pointer.data = data[pos.* .. pos.* + str_len];
-            str_pointer.len = str_len;
+            // Allocate memory for length-prefixed string (8 bytes for length + string data)
+            const memory = allocator.alloc(u8, 8 + str_len) catch return ByteCodeParseError.InvalidBytecode;
+
+            // Store length in first 8 bytes
+            @as(*usize, @ptrCast(@alignCast(memory.ptr))).* = str_len;
+
+            // Copy string data after the length
+            @memcpy(memory[8..], data[pos.* .. pos.* + str_len]);
 
             pos.* += str_len;
 
-            ret = Global.toStackWord(@as(usize, @intFromPtr(str_pointer)));
+            ret = Global.toStackWord(@as(usize, @intFromPtr(memory.ptr)));
         },
         .Bool => {
             if (pos.* >= data.len) return ByteCodeParseError.InvalidBytecode;
@@ -143,12 +147,14 @@ pub fn loadBytecode(data: []const u8) !MachineData {
     }
 
     // Print loaded constants for debugging
+    // Print loaded constants for debugging
     std.log.debug("Loaded constants:", .{});
     for (constants, constant_types.items) |v, t| {
-        std.log.debug("  Constant: {s}", .{(Value.valueToString(t, v, allocator) catch {
+        const str = Value.valueToString(t, v, allocator) catch {
             std.log.err("Error converting value to string: {s}", .{@tagName(t)});
             return ByteCodeParseError.InvalidBytecode;
-        }).data});
+        };
+        std.log.debug("  Constant: {s}", .{str});
     }
     const num_functions = data[pos];
     std.log.debug("Number of functions: {d}", .{num_functions});

@@ -1,5 +1,5 @@
 const std = @import("std");
-const String = @import("string.zig").String;
+const stringutil = @import("string.zig");
 const Global = @import("global.zig");
 const StackWord = Global.StackWord;
 pub const ValueType = enum {
@@ -13,24 +13,26 @@ pub const ValueType = enum {
     Pointer,
 };
 
-pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.Allocator) !String {
+pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.Allocator) ![]const u8 {
     switch (val_type) {
         .Int => {
             const intval = Global.fromStackWord(i64, val);
-            return String.new(try std.fmt.allocPrint(allocator, "{d}", .{intval}));
+            return try stringutil.fromInt(intval, allocator);
         },
         .Float => {
             const floatval = Global.fromStackWord(f64, val);
-            return String.new(try std.fmt.allocPrint(allocator, "{d}", .{floatval}));
+            return try stringutil.fromFloat(floatval, allocator);
         },
         .String => {
-            const str_pointer = @as(*String, @ptrFromInt(@as(usize, val)));
-            return str_pointer.*;
+            const str_pointer = @as([*]const u8, @ptrFromInt(@as(usize, val)));
+            // Add @alignCast to ensure proper alignment for usize
+            const len = @as(*const usize, @ptrCast(@alignCast(str_pointer))).*;
+            return str_pointer[8 .. 8 + len]; // Adjust based on how length is stored
         },
         .Bool => {
             const boolval = Global.fromStackWord(u64, val) != 0;
-            return String.new(try std.fmt.allocPrint(allocator, "{any}", .{boolval}));
+            return try stringutil.fromBool(boolval, allocator);
         },
-        else => return String.new("Unsupported type"),
+        else => return "Unsupported type",
     }
 }
