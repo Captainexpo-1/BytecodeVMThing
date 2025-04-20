@@ -10,7 +10,9 @@ pub const Stack = struct {
 
     /// Create a stack capable of holding `size` words
     pub fn init(allocator: std.mem.Allocator) Stack {
-        const items = allocator.alloc(StackWord, STACK_SIZE) catch unreachable;
+        const items = allocator.alloc(StackWord, STACK_SIZE) catch {
+            std.debug.panic("Failed to allocate stack", .{});
+        };
         return Stack{
             .items = items,
             .sp = 0,

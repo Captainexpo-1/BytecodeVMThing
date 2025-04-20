@@ -10,9 +10,18 @@ pub const String = struct {
     pub fn add(self: String, other: String) String {
         var buffer = std.ArrayList(u8).init(std.heap.page_allocator);
         defer buffer.deinit();
-        buffer.appendSlice(self.data) catch unreachable;
-        buffer.appendSlice(other.data) catch unreachable;
-        return String{ .data = buffer.toOwnedSlice() catch unreachable };
+        buffer.appendSlice(self.data) catch {
+            std.debug.print("Error appending slice\n", .{});
+            return String{ .data = "" };
+        };
+        buffer.appendSlice(other.data) catch {
+            std.debug.print("Error appending slice\n", .{});
+            return String{ .data = "" };
+        };
+        return String{ .data = buffer.toOwnedSlice() catch {
+            std.debug.print("Error converting to owned slice\n", .{});
+            return String{ .data = "" };
+        } };
     }
 
     pub fn fromInt(value: i64) String {

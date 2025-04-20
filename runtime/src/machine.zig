@@ -369,7 +369,10 @@ pub const Machine = struct {
             .local_vars = std.ArrayList(StackWord).init(allocator),
             .return_pc = return_pc,
         };
-        self.call_stack.append(new_frame) catch unreachable;
+        self.call_stack.append(new_frame) catch {
+            self.errorAndStop("Failed to append call frame");
+            return;
+        };
         self.current_callframe = &self.call_stack.items[self.call_stack.items.len - 1];
         // Pop args if any (omitted)
     }
@@ -396,7 +399,10 @@ pub const Machine = struct {
     }
 
     pub fn addConstant(self: *Machine, val: StackWord) void {
-        self.constants.append(val) catch unreachable;
+        self.constants.append(val) catch {
+            self.errorAndStop("Failed to add constant");
+            return;
+        };
     }
 
     pub fn deinit(self: *Machine) void {
@@ -408,11 +414,19 @@ pub const Machine = struct {
     }
 
     pub fn addFunction(self: *Machine, func: Function) void {
-        self.function_table.append(func) catch unreachable;
+        self.function_table.append(func) catch {
+            self.errorAndStop("Failed to add function");
+            return;
+        };
     }
 
     pub fn addConstants(self: *Machine, constants: []const StackWord) void {
         for (constants) |c| self.addConstant(c);
+    }
+
+    pub fn loadFromMachineData(self: *Machine, data: MachineData) void {
+        self.addConstants(data.constants);
+        for (data.functions) |f| self.addFunction(f);
     }
 };
 
@@ -427,3 +441,8 @@ pub const CallFrame = struct {
 };
 
 pub const MachineState = enum { Running, Halted, Error };
+
+pub const MachineData = struct {
+    constants: []const StackWord,
+    functions: []const Function,
+};

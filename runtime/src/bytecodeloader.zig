@@ -1,13 +1,13 @@
 const std = @import("std");
 const String = @import("string.zig").String;
-const Value = @import("value.zig").Value;
 const ValueType = @import("value.zig").ValueType;
 const Instruction = @import("instruction.zig").Instruction;
 const OpCode = @import("instruction.zig").OpCode;
 const Function = @import("bytecode.zig").Function;
-
+const Global = @import("global.zig");
+const StackWord = Global.StackWord;
 const MachineData = @import("machine.zig").MachineData;
-
+const Value = @import("value.zig");
 const allocator = std.heap.page_allocator;
 
 const ByteCodeParseError = error{
@@ -55,9 +55,11 @@ fn readFunction(data: []const u8, pos: *usize) !Function {
     };
 }
 
-fn readValue(data: []const u8, pos: *usize) !Value {
+fn readValue(data: []const u8, pos: *usize) !std.meta.Tuple(&[_]type{ StackWord, ValueType }) {
     const value_type: ValueType = @enumFromInt(data[pos.*]);
     pos.* += 1;
+
+    var ret: StackWord = 0;
 
     switch (value_type) {
         .Float => {
@@ -68,7 +70,7 @@ fn readValue(data: []const u8, pos: *usize) !Value {
             const float_value = (@as(*f64, @ptrCast(&intval))).*;
 
             pos.* += 8;
-            return Value.newValue(.{ .float = float_value }, .Float);
+            ret = Global.toStackWord(float_value);
         },
         .Int => {
             if (pos.* + 8 > data.len) return ByteCodeParseError.InvalidBytecode;
@@ -76,7 +78,7 @@ fn readValue(data: []const u8, pos: *usize) !Value {
 
             const intval: i64 = std.mem.readInt(i64, @ptrCast(buf.ptr), std.builtin.Endian.little);
             pos.* += 8;
-            return Value.newValue(.{ .int = intval }, .Int);
+            ret = Global.toStackWord(intval);
         },
         .String => {
             if (pos.* >= data.len) return ByteCodeParseError.InvalidBytecode;
@@ -97,21 +99,30 @@ fn readValue(data: []const u8, pos: *usize) !Value {
             const str_value = String{ .data = data[pos.* .. pos.* + str_len] };
             pos.* += str_len;
 
-            return Value.newValue(.{ .string = str_value }, .String);
+            const str_pointer = &str_value;
+
+            ret = Global.toStackWord(@as(usize, @intFromPtr(str_pointer)));
         },
         .Bool => {
             if (pos.* >= data.len) return ByteCodeParseError.InvalidBytecode;
             const bool_value = data[pos.*] != 0;
             pos.* += 1;
-            return Value.newValue(.{ .bool = bool_value }, .Bool);
+            ret = Global.toStackWord(@as(u64, @intFromBool(bool_value)));
         },
-        .List => unreachable,
-        .None => return Value.newValue(.{ .none = {} }, .None),
+        .List => {
+            if (pos.* >= data.len) return ByteCodeParseError.InvalidBytecode;
+            const list_pointer = @as(*Value, @ptrFromInt(@as(usize, data[pos.*])));
+            pos.* += 8;
+            ret = Global.toStackWord(@as(usize, @intFromPtr(list_pointer)));
+        },
+        .None => ret = Global.toStackWord(@as(u64, 0)),
         else => {
             std.log.debug("Unimplemented value type: {d}", .{@intFromEnum(value_type)});
             return ByteCodeParseError.Unimplemented;
         },
     }
+
+    return .{ ret, value_type };
 }
 
 pub fn loadBytecode(data: []const u8) !MachineData {
@@ -121,16 +132,22 @@ pub fn loadBytecode(data: []const u8) !MachineData {
 
     pos += 1;
 
-    var constants = allocator.alloc(Value, num_constants) catch return ByteCodeParseError.InvalidBytecode;
+    var constant_types = std.ArrayList(ValueType).init(allocator);
+    defer constant_types.deinit();
+    var constants = allocator.alloc(StackWord, num_constants) catch return ByteCodeParseError.InvalidBytecode;
     for (0..num_constants) |i| {
         const value = try readValue(data, &pos);
-        constants[i] = value;
+        constants[i] = value[0];
+        constant_types.append(value[1]) catch return ByteCodeParseError.InvalidBytecode;
     }
 
     // Print loaded constants for debugging
     std.log.debug("Loaded constants:", .{});
-    for (constants) |v| {
-        std.log.debug("  Constant: {s}", .{v.toString().data});
+    for (constants, constant_types.items) |v, t| {
+        std.log.debug("  Constant: {s}", .{(Value.valueToString(t, v, allocator) catch {
+            std.log.err("Error converting value to string: {s}", .{@tagName(t)});
+            return ByteCodeParseError.InvalidBytecode;
+        }).data});
     }
     const num_functions = data[pos];
     std.log.debug("Number of functions: {d}", .{num_functions});
