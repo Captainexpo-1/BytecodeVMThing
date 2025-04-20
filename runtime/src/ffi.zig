@@ -115,6 +115,24 @@ pub fn input(args: []StackWord) StackWord {
     return @as(StackWord, @intFromPtr(memory.ptr));
 }
 
+pub fn intFromString(args: []StackWord) StackWord {
+    if (args.len != 1) {
+        std.log.err("intFromString: Invalid number of arguments\n", .{});
+        return @as(StackWord, 1);
+    }
+
+    const str_ptr = @as([*]const u8, @ptrFromInt(@as(usize, args[0])));
+    const str_len = @as(*const usize, @ptrCast(@alignCast(str_ptr))).*;
+    const str = str_ptr[8 .. 8 + str_len];
+
+    const intval = std.fmt.parseInt(i64, str, 10) catch {
+        std.log.err("intFromString: Error parsing integer\n", .{});
+        return @as(StackWord, 1);
+    };
+
+    return Global.toStackWord(intval);
+}
+
 pub fn registerFFI(comptime name: []const u8, comptime args: []const ValueType, comptime ret: ValueType, comptime function: FFIFn) !void {
     // Make a copy of the args slice to own it
 
@@ -146,6 +164,7 @@ pub fn initFFI() !void {
     try registerFFI("print", &[_]ValueType{ .Int, .Int }, .None, print);
     try registerFFI("str_concat", &[_]ValueType{ .String, .String }, .String, str_concat);
     try registerFFI("input", &[_]ValueType{}, .String, input);
+    try registerFFI("intFromString", &[_]ValueType{.String}, .Int, intFromString);
 }
 
 pub fn deinitFFI() void {

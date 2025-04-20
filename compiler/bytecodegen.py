@@ -99,6 +99,9 @@ class OpCode(Enum):
     # Foreign function interface
     CallFFI = _auto()
 
+    # Advanced control flow
+    TailCall = _auto()  # Tail call optimization
+
 globalnum = 0
 
 
@@ -180,58 +183,57 @@ def genByteCode(constants: List[Value], functions: List[Function], output_file='
 
 
 def getData():
-
-    def ffi(name: str) -> int:
-        # name = name of the foreign function
-        # returns the index of the foreign function
-        
-        for i, ffi_name in enumerate(FFI):
-            if ffi_name == name:
-                return i
-        raise ValueError(f"Foreign function '{name}' not found")
-    
-    def const(name: str) -> int:
-        # name = name of the constant
-        # returns the index of the constant
-        
-        for i, (const_name, const_value) in enumerate(constants):
-            if const_name == name:
-                return i
-        raise ValueError(f"Constant '{name}' not found")
-    
-    FFI = [
-        "print",
-        "str_concat",
-        "input",
-    ]
-    
     constants = [
-        ("prompt",Value("Hello! What is your name?\n", ValueType.STRING)),
-        ("compliment",Value(" is a really good name!\n", ValueType.STRING)),
-        ("str_type",Value(ValueType.STRING.value, ValueType.INT)), 
+        Value(0, ValueType.INT), 
+        Value(1, ValueType.INT),
+        Value(10, ValueType.INT),
+        Value(6, ValueType.INT),
+        Value(ValueType.INT.value, ValueType.INT), 
+        Value("Enter your input: ", ValueType.STRING),
+        Value(ValueType.STRING.value, ValueType.INT),
     ]
     
-
     functions = [
         Function(
             arg_types=[],  # No arguments
             return_type=ValueType.NONE,  # Returns a float
             code = [
-                Instruction(OpCode.LoadConst, const("prompt")),  # Load constant 0 (5.0)
-                Instruction(OpCode.LoadConst, const("str_type")),  # Load constant 1 (5.0)
-                Instruction(OpCode.CallFFI, ffi("print")),  # Call foreign function
-        
-                Instruction(OpCode.CallFFI, ffi("input")),  # Call foreign function
-                Instruction(OpCode.LoadConst, const("compliment")),  # Load constant 1 (5.0)
-                Instruction(OpCode.CallFFI, ffi("str_concat")),  # Call foreign function
-                Instruction(OpCode.LoadConst, const("str_type")),  # Load constant 1 (5.0)
-                Instruction(OpCode.CallFFI, ffi("print")),  # Call foreign function
+                Instruction(OpCode.LoadConst, 5),  # Load constant 5
+                Instruction(OpCode.LoadConst, 6),  # Load constant 6
+                Instruction(OpCode.CallFFI, 0),  # Load constant 7
+                Instruction(OpCode.CallFFI, 2),
+                Instruction(OpCode.CallFFI, 3),  # Convert 5.0 to int
+                Instruction(OpCode.Call, 1),  # Call factorial
+                Instruction(OpCode.LoadConst, 4), 
+                Instruction(OpCode.CallFFI, 0),
                 Instruction(OpCode.Halt)  # Halt the program
             ]
         ),
+        # Factorial function
+        Function(
+            arg_types=[ValueType.INT],  # Takes one argument (n)
+            return_type=ValueType.INT,  # Returns a float
+            code=[
+                Instruction(OpCode.LoadVarI, 0),  # Load n
+                Instruction(OpCode.LoadConst, 0),  # Load constant 0
+                Instruction(OpCode.EqI),  # If n == 0, jump to recursion
+                Instruction(OpCode.Jif, 11),  # If n == 0, jump to recursion
+
+                Instruction(OpCode.LoadVarI, 0),  # Load n
+                Instruction(OpCode.LoadConst, 1),  # Load constant 1
+                Instruction(OpCode.SubI),  # n - 1
+                Instruction(OpCode.Call, 1),  # Call factorial(n - 1)
+                Instruction(OpCode.LoadVarI, 0),  # Load n
+                Instruction(OpCode.MulI),  # n * factorial(n - 1)
+                Instruction(OpCode.Ret),  # Return the result
+                
+                Instruction(OpCode.LoadConst, 1),  # Load constant 1
+                Instruction(OpCode.Ret),  # Return 1
+            ]
+        )
     ]
     
-    return [val for name, val in constants], functions
+    return constants, functions
 
 
 if __name__ == "__main__":

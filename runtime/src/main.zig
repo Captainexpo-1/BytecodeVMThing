@@ -57,7 +57,6 @@ pub fn main() !void {
 
     const len: f64 = @floatFromInt(timer.read());
 
-    std.log.debug("Took {d}ms, {d}ms per instruction", .{ len / 1e+6, len / @as(f64, @floatFromInt(machine.instructions_executed)) / 1e+6 });
-
+    std.log.debug("\nTook {d}ms, {d}ms per instruction and executed {d} instructions", .{ len / 1e+6, len / @as(f64, @floatFromInt(machine.instructions_executed)) / 1e+6, machine.instructions_executed });
     return;
 }

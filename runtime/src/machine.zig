@@ -248,6 +248,18 @@ pub const Machine = struct {
                 if (v) self.current_callframe.?.pc = instr.operand;
             },
             OpCode.Call => self.callFunction(instr.operand),
+            OpCode.TailCall => {
+                const func_index = instr.operand;
+                const func = self.function_table.items[func_index];
+                const args_arr: []StackWord = self.stack.popN(func.arg_types.len);
+                for (0..args_arr.len) |i| {
+                    while (i >= self.current_callframe.?.local_vars.items.len) {
+                        self.current_callframe.?.local_vars.append(0) catch {};
+                    }
+                    self.current_callframe.?.local_vars.items[i] = args_arr[i];
+                }
+                self.current_callframe.?.pc = 0;
+            },
             OpCode.Ret => |_| {
                 if (self.call_stack.items.len == 0) {
                     self.errorAndStop("Return underflow");
@@ -362,7 +374,7 @@ pub const Machine = struct {
                 const args_arr: []StackWord = self.stack.popN(func.arg_types.len);
 
                 const res: StackWord = func.call(args_arr) catch |err| {
-                    self.errorAndStop(std.fmt.allocPrint(allocator, "FFI call failed: {?}", .{err}) catch "Error");
+                    self.errorAndStop(std.fmt.allocPrint(allocator, "FFI call to {d} failed: {?}", .{ func_index, err }) catch "Error");
                     return;
                 };
 

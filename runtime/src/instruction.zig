@@ -87,6 +87,9 @@ pub const OpCode = enum(u8) {
 
     // Foreign function interface
     CallFFI,
+
+    // Advanced control flow
+    TailCall,
 };
 
 pub const Instruction = struct {

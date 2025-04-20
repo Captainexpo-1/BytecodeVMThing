@@ -33,6 +33,6 @@ pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.All
             const boolval = Global.fromStackWord(u64, val) != 0;
             return try stringutil.fromBool(boolval, allocator);
         },
-        else => return "Unsupported type",
+        else => return std.fmt.allocPrint(allocator, "Unsupported type for string conversion: {s}", .{@tagName(val_type)}),
     }
 }
