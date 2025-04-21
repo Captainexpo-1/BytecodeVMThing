@@ -47,7 +47,7 @@ class BytecodeAsmParser:
                         raise ParseError(line_number, "Nested function definitions not allowed")
                     
                     in_function = True
-                    function_name = match.group(1)
+                    _function_name = match.group(1)
                     args_str = match.group(2).strip()
                     return_type_str = match.group(3).strip()
                     

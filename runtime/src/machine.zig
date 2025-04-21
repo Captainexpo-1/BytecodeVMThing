@@ -304,6 +304,19 @@ pub const Machine = struct {
                 }
                 self.current_callframe.?.local_vars.items[idx] = v;
             },
+            OpCode.StoreVarStr => {
+                const idx = instr.operand;
+                const v = self.stack.pop();
+                while (idx >= self.current_callframe.?.local_vars.items.len) {
+                    self.current_callframe.?.local_vars.append(0) catch {};
+                }
+                self.current_callframe.?.local_vars.items[idx] = v;
+            },
+            OpCode.LoadVarStr => {
+                const idx = instr.operand;
+                const v = self.current_callframe.?.local_vars.items[idx];
+                self.stack.push(v);
+            },
             // Pointer operations
             OpCode.LoadAddrI => {
                 // get the address of the variable at idx

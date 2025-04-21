@@ -69,6 +69,8 @@ class OpCode(Enum):
     LoadVarF = _auto()
     StoreVarI = _auto()
     StoreVarF = _auto()
+    StoreVarStr = _auto()  # Store struct field
+    LoadVarStr = _auto()  # Load struct field
 
     # Pointer operations (typed)
     LoadAddrI = _auto()
@@ -135,6 +137,10 @@ class Value:
         elif self.type == ValueType.INT:
             return self.value.to_bytes(8, byteorder='little')
         return b''
+    def __str__(self):
+        return f"Value(value={self.value}, type={self.type})"
+    def __repr__(self):
+        return self.__str__()
 
 
 class Instruction:
@@ -146,6 +152,10 @@ class Instruction:
         bytecode = self.opcode.value.to_bytes(1, byteorder='little')
         bytecode += self.arg.to_bytes(1, byteorder='little')
         return bytecode
+    def __str__(self):
+        return f"{self.opcode}({self.arg})"
+    def __repr__(self):
+        return self.__str__()
 
 
 class Function:
@@ -168,6 +178,11 @@ class Function:
             print(f"Instruction: ({instr.opcode.value}){instr.opcode}", "Arg:", instr.arg)
             bytecode += instr.to_bytes()
         return bytecode
+    
+    def __str__(self):
+        return f"\nFunction(arg_types={self.arg_types}, return_type={self.return_type}, code={'\n  '.join([str(i)for i in self.code])})"
+    def __repr__(self):
+        return self.__str__()
 
 
 def genByteCode(constants: List[Value], functions: List[Function], output_file='bytecode.bin'):
@@ -180,6 +195,38 @@ def genByteCode(constants: List[Value], functions: List[Function], output_file='
         f.write(len(functions).to_bytes(1, byteorder='little'))
         for func in functions:
             f.write(func.to_bytes())
+
+def readByteCode(input_file='bytecode.bin'):
+    with open(input_file, 'rb') as f:
+        num_constants = int.from_bytes(f.read(1), byteorder='little')
+        constants = []
+        for _ in range(num_constants):
+            type_value = int.from_bytes(f.read(1), byteorder='little')
+            type = ValueType(type_value)
+            if type == ValueType.INT:
+                value = int.from_bytes(f.read(8), byteorder='little')
+            elif type == ValueType.FLOAT:
+                import struct
+                value = struct.unpack('<d', f.read(8))[0]
+            elif type == ValueType.STRING:
+                length = int.from_bytes(f.read(4), byteorder='little')
+                value = f.read(length).decode('utf-8')
+            elif type == ValueType.BOOL:
+                value = bool(int.from_bytes(f.read(1), byteorder='little'))
+            else:
+                raise ValueError("Unsupported constant type")
+            constants.append(Value(value, type))
+        num_functions = int.from_bytes(f.read(1), byteorder='little')
+        functions = []
+        for _ in range(num_functions):
+            return_type_value = int.from_bytes(f.read(1), byteorder='little')
+            return_type = ValueType(return_type_value)
+            num_args = int.from_bytes(f.read(1), byteorder='little')
+            arg_types = [ValueType(int.from_bytes(f.read(1), byteorder='little')) for _ in range(num_args)]
+            code_length = int.from_bytes(f.read(2), byteorder='little')
+            code = [Instruction(OpCode(int.from_bytes(f.read(1), byteorder='little')), int.from_bytes(f.read(1), byteorder='little')) for _ in range(code_length)]
+            functions.append(Function(arg_types, return_type, code))
+    return constants, functions
 
 
 def getData():

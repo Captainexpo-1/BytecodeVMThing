@@ -59,6 +59,8 @@ pub const OpCode = enum(u8) {
     LoadVarF,
     StoreVarI,
     StoreVarF,
+    StoreVarStr,
+    LoadVarStr,
 
     // Pointer operations (typed)
     LoadAddrI,
