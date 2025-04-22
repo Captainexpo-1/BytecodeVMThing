@@ -1,9 +1,9 @@
-from typing import List, Optional, Any
+from typing import List
 from compiler.lexer.token import Token, TokenType, types
 from compiler.parser.astnodes import (
     Expr, Stmt, Decl,
     Binary, Unary, Literal, Variable, Call, TypeLiteral,
-    ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, BlockStmt,
+    ExprStmt, VarDeclStmt, ReturnStmt, IfStmt,
     Param, FunctionDecl, Program,
     Type
 )
@@ -93,7 +93,7 @@ class Parser:
         )
     
     def function_declaration(self) -> FunctionDecl:
-        token_type = self.previous().token_type
+        _token_type = self.previous().token_type
         name = self.consume(TokenType.IDENTIFIER, "Expected function name").value
         self.consume(TokenType.LPAREN, "Expected '(' after function name")
         is_variadic = False

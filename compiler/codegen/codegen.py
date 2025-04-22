@@ -1,15 +1,10 @@
 from typing import (
     List, 
-    Dict,
-    Any,
+
     Optional,
     Tuple
 )
 import compiler.parser.astnodes as ast
-from compiler.lexer.token import (
-    TokenType, 
-    Token
-)
 from compiler.bytecodegen import (
     Function, 
     Instruction, 
