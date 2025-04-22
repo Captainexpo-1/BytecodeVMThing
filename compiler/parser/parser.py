@@ -158,9 +158,7 @@ class Parser:
     
     def if_statement(self) -> IfStmt:
         token = self.previous()
-        self.consume(TokenType.LPAREN, "Expected '(' after 'if'")
         condition = self.expression()
-        self.consume(TokenType.RPAREN, "Expected ')' after condition")
         self.consume(TokenType.THEN, "Expected 'then' after condition")
         
         then_branch = []

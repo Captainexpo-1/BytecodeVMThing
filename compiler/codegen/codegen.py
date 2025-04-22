@@ -28,6 +28,7 @@ class CodeGenerator:
         self.constants: List[Value] = []
         self.functions: OrderedDict[str, Function] = OrderedDict()
         self.extern_functions: OrderedDict[str, Function] = OrderedDict()
+        self.cur_pos = lambda: len(self.current_function.code) if self.current_function else 0
     
     def get_extern_function(self, name: str) -> Tuple[Function, int]:
         # returns the extern function and its index
@@ -77,28 +78,60 @@ class CodeGenerator:
 
 
     def visit(self, node):
+        print("Visiting node:", node)
         method_name = f"visit_{node.__class__.__name__.lower()}"
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node)
 
     def visit_Program(self, node: ast.Program):
+        # First pass: register all functions
         for stmt in node.declarations:
-            self.visit(stmt)
+            if isinstance(stmt, ast.FunctionDecl):
+                self.register_function(stmt)
+        
+        # Second pass: generate code for function bodies
+        for stmt in node.declarations:
+            if isinstance(stmt, ast.FunctionDecl) and not stmt.is_extern:
+                self.generate_function_body(stmt)
+        
         return list(self.functions.values()), self.constants 
 
-    def tokentype_to_value_type(self, token_type: TokenType) -> ValueType:
-        assert isinstance(token_type, TokenType)
-        m = {
-            TokenType.INT: ValueType.INT,
-            TokenType.FLOAT: ValueType.FLOAT,
-            TokenType.STRING: ValueType.STRING,
-            TokenType.BOOL: ValueType.BOOL,
-            TokenType.POINTER: ValueType.POINTER,
-            TokenType.NONE: ValueType.NONE
-        }
-        if token_type in m:
-            return m[token_type]
-        raise Exception(f"Unknown type: {token_type}")
+    def register_function(self, node: ast.FunctionDecl):
+        return_type = self.ast_type_to_value_type(node.return_type)
+        arg_types = list(map(lambda param: self.ast_type_to_value_type(param.type), node.params))
+        
+        if node.is_extern:
+            self.add_extern_function(node.name, Function(
+                arg_types=arg_types,
+                return_type=return_type,
+                code=[],
+                is_variadic=node.is_variadic,
+                name=node.name
+            ))
+        else:
+            function = Function(
+                arg_types=arg_types,
+                return_type=return_type,
+                code=[],
+                is_variadic=node.is_variadic,
+                name=node.name
+            )
+            self.add_function(node.name, function)
+
+    def generate_function_body(self, node: ast.FunctionDecl):
+        self.current_function, _ = self.get_function(node.name)
+        self.locals = [(param.name, self.ast_type_to_value_type(param.type)) for param in node.params]
+        
+        for stmt in node.body:
+            self.visit(stmt)
+        
+        self.current_function = None
+        self.locals = []
+
+    def visit_functiondecl(self, node: ast.FunctionDecl):
+        # Functions are now registered in the first pass
+        # Bodies are generated in the second pass
+        pass
     
     def ast_type_to_value_type(self, ast_type: ast.Type) -> ValueType:
         assert isinstance(ast_type, ast.Type)
@@ -141,6 +174,22 @@ class CodeGenerator:
             "div": {
                 ValueType.INT: OpCode.DivI,
                 ValueType.FLOAT: OpCode.DivF,                
+            },
+            "eq": {
+                ValueType.INT: OpCode.EqI,
+                ValueType.FLOAT: OpCode.EqF,
+            },
+            "neq": {
+                ValueType.INT: OpCode.NeqI,
+                ValueType.FLOAT: OpCode.NeqF,
+            },
+            "lt": {
+                ValueType.INT: OpCode.LtI,
+                ValueType.FLOAT: OpCode.LtF,
+            },
+            "gt": {
+                ValueType.INT: OpCode.GtI,
+                ValueType.FLOAT: OpCode.GtF,
             }
         }
         if instr_type in m:
@@ -148,7 +197,7 @@ class CodeGenerator:
                 return m[instr_type][type]
         raise Exception(f"Unknown instruction type: {instr_type} for type: {type}")
         
-    def visit_functiondecl(self, node: ast.FunctionDecl):
+    """def visit_functiondecl(self, node: ast.FunctionDecl):
         return_type = node.return_type
         params = node.params
         body = node.body
@@ -174,7 +223,7 @@ class CodeGenerator:
         for stmt in body:
             self.visit(stmt)
         self.current_function = None
-        self.locals = []
+        self.locals = []"""
 
     def find_local(self, name: str) -> int:
         for i, (local_name, _) in enumerate(self.locals):
@@ -210,11 +259,10 @@ class CodeGenerator:
             return self.constants[instruction.arg].type
         raise Exception(f"Unknown instruction type: {instruction.opcode}")
     
+    
     def visit_binary(self, node: ast.Binary):
-        left = self.visit(node.left)
-        right = self.visit(node.right)
-        l_type = self.get_type(left)
-        r_type = self.get_type(right)
+        l_type: ValueType = self.visit(node.left)
+        r_type: ValueType = self.visit(node.right)
         if l_type != r_type:
             raise Exception(f"Type mismatch: {l_type} and {r_type}")
         if node.operator == "+":
@@ -229,9 +277,12 @@ class CodeGenerator:
         elif node.operator == "/":
             self.add_instruction(self.get_instruction_type("div", l_type))
             return l_type
+        elif node.operator == "==":
+            self.add_instruction(self.get_instruction_type("eq", l_type))
+            return ValueType.BOOL
         # TODO: Add support for other binary operators
             
-        raise Exception(f"Unknown binary operator: {node.op}")
+        raise Exception(f"Unknown binary operator: {node.operator}")
     
     def visit_literal(self, node: ast.Literal):
         const = None
@@ -250,7 +301,7 @@ class CodeGenerator:
         )
         return self.constants[const].type
     def visit_returnstmt(self, node: ast.ReturnStmt) -> ValueType:
-        if node.value.value:
+        if node.value:
             self.visit(node.value)
         self.add_instruction(OpCode.Ret)
         return ValueType.NONE
@@ -327,5 +378,26 @@ class CodeGenerator:
         )
         return self.locals[local_index][1]
     
+    def visit_ifstmt(self, node: ast.IfStmt):
+        condition_type = self.visit(node.condition)
+        if condition_type != ValueType.BOOL:
+            raise Exception(f"Condition type must be bool, but got {condition_type}")
+        
+        jump = self.add_instruction(OpCode.Jz, 0)
+        
+        for stmt in node.then_branch:
+            self.visit(stmt)
+            
+        jump_end = self.add_instruction(OpCode.Jmp, 0)
+        jump.arg = self.cur_pos()
+        
+        if node.else_branch:
+            for stmt in node.else_branch:
+                self.visit(stmt)
+        
+        jump_end.arg = self.cur_pos()
+        
+        return ValueType.NONE
+    
     def generic_visit(self, node):
-        raise Exception(f"No visit_{node.__class__.__name__} method")
+        raise Exception(f"No visit_{node.__class__.__name__.lower()} method")

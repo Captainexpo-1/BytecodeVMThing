@@ -31,44 +31,11 @@ pub var FFI_mapping = std.StringHashMap(FFIData).init(std.heap.page_allocator);
 pub var FFI_mapping_linear = std.ArrayList(FFIData).init(std.heap.page_allocator);
 
 pub fn print(stack: *Stack) StackWord {
-    // fmt string
-
-    const fmt_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
-    const fmt_len = @as(*const usize, @ptrCast(@alignCast(fmt_ptr))).*;
-    const format_str = fmt_ptr[8 .. 8 + fmt_len];
-
-    // Get the number of arguments from the format string
-    const num_args = std.mem.count(u8, format_str, "%");
-
-    // Create an array to hold the arguments
-    var args = std.ArrayList(StackWord).init(std.heap.page_allocator);
-    defer args.deinit();
-
-    for (0..num_args) |_| {
-        args.append(stack.pop()) catch unreachable;
-    }
-    // Convert the format string to a C string
-    const c_format_str: [:0]u8 = std.heap.page_allocator.allocSentinel(u8, format_str.len, 0) catch {
-        std.log.err("system: Error duplicating format string\n", .{});
+    std.debug.print("{s}", .{Value.valueToString(.String, stack.pop(), std.heap.page_allocator) catch {
+        std.log.err("print: Error converting value to string\n", .{});
         return @as(StackWord, 1);
-    };
-    defer std.heap.page_allocator.free(c_format_str);
-
-    @memcpy(c_format_str[0..format_str.len], format_str);
-    var res: c_int = 1;
-
-    switch (args.items.len) {
-        0 => res = stdio.printf(c_format_str),
-        1 => res = stdio.printf(c_format_str, args.items[0]),
-        2 => res = stdio.printf(c_format_str, args.items[0], args.items[1]),
-        3 => res = stdio.printf(c_format_str, args.items[0], args.items[1], args.items[2]),
-        4 => res = stdio.printf(c_format_str, args.items[0], args.items[1], args.items[2], args.items[3]),
-        else => {
-            std.log.err("print: Too many arguments\n", .{});
-            return @as(StackWord, 1);
-        },
-    }
-    return @as(StackWord, @intCast(res));
+    }});
+    return @as(StackWord, 0);
 }
 
 pub fn str_concat(stack: *Stack) StackWord {
@@ -145,6 +112,28 @@ pub fn intFromString(stack: *Stack) StackWord {
     return Global.toStackWord(intval);
 }
 
+pub fn toString(stack: *Stack) StackWord {
+    const val_type = @as(ValueType, @enumFromInt(stack.pop()));
+    const val = stack.pop();
+
+    const result = Value.valueToString(val_type, val, std.heap.page_allocator) catch {
+        std.log.err("toString: Error converting value to string\n", .{});
+        return @as(StackWord, 1);
+    };
+
+    // Allocate new string with length prefix
+    const full_len = result.len + 8;
+    const memory = std.heap.page_allocator.alloc(u8, full_len) catch {
+        std.log.err("toString: Error allocating memory for result\n", .{});
+        return @as(StackWord, 1);
+    };
+    // Store length in first 8 bytes
+    @as(*usize, @ptrCast(@alignCast(memory.ptr))).* = result.len;
+    // Copy string data
+    @memcpy(memory[8..], result);
+    return @as(StackWord, @intFromPtr(memory.ptr));
+}
+
 pub fn system(stack: *Stack) StackWord {
     var command_args = std.heap.page_allocator.alloc([]const u8, stack.sp) catch {
         std.log.err("system: Error allocating memory for command arguments\n", .{});
@@ -177,6 +166,7 @@ pub fn initFFI() !void {
     try registerFFI("input", &[_]ValueType{}, .String, input, false);
     try registerFFI("intFromString", &[_]ValueType{.String}, .Int, intFromString, false);
     try registerFFI("system", &[_]ValueType{}, .String, system, true);
+    try registerFFI("toString", &[_]ValueType{.Int}, .String, toString, false);
 }
 
 pub fn registerFFI(comptime name: []const u8, comptime args: []const ValueType, comptime ret: ValueType, comptime function: FFIFn, comptime arbitrary_args: bool) !void {

@@ -61,16 +61,7 @@ def main():
             print(f"Error reading file: {e}")
             return 1
     else:
-        source_code = """extern print(...) -> none;
-extern strConcat(string, string) -> string;
-extern input() -> string;
-extern intFromStr(string) -> int;
-
-// Main function - entry point of the program
-fn main() -> none
-    print("Hello %s", "this is a test\\n");
-    return null;                                // End program execution
-end"""
+        source_code = """"""
     
     ast = parse_source(source_code)
     

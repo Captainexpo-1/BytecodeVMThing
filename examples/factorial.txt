@@ -1,0 +1,25 @@
+extern print(string) -> none;
+extern strConcat(string, string) -> string;
+extern input() -> string;
+extern intFromStr(string) -> int;
+extern system(string) -> int;
+extern toString(...) -> string;
+
+
+// Main function - entry point of the program
+fn main() -> none
+    var x: int = other(intFromStr(input()));
+    var o: string = strConcat(toString(#INT, x), "\n");
+    print(o);
+    return;
+end
+
+fn other(a: int) -> int
+    if a == 0 then
+        return 1;
+    else
+        return a * other(a - 1);
+    end
+end
+
+
