@@ -48,6 +48,7 @@ class TokenType(Enum):
     COMMA = auto()        # ,
     ARROW = auto()        # ->
     HASH = auto()         # #
+    DOTDOTDOT = auto()      # ...
     
     # Identifiers
     IDENTIFIER = auto()   # variable and function names

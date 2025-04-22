@@ -5,19 +5,24 @@ const Global = @import("global.zig");
 const StackWord = Global.StackWord;
 const Value = @import("value.zig");
 const String = @import("string.zig");
+const Stack = @import("stack.zig").Stack;
+
+const stdio = @cImport({
+    @cDefine("_NO_CRT_STDIO_INLINE", "1");
+    @cInclude("stdio.h");
+});
+
 // Define the function type
-pub const FFIFn = *const fn (args: []StackWord) StackWord;
+pub const FFIFn = *const fn (stack: *Stack) StackWord;
 
 pub const FFIData = struct {
     arg_types: []const ValueType,
     ret: ValueType,
     function: FFIFn,
+    arbitrary_args: bool,
 
-    pub fn call(self: FFIData, args: []StackWord) !StackWord {
-        if (args.len != self.arg_types.len) {
-            return error.InvalidArgumentCount;
-        }
-        return self.function(args);
+    pub fn call(self: FFIData, stack: *Stack) !StackWord {
+        return self.function(stack);
     }
 };
 
@@ -25,42 +30,55 @@ pub const FFIData = struct {
 pub var FFI_mapping = std.StringHashMap(FFIData).init(std.heap.page_allocator);
 pub var FFI_mapping_linear = std.ArrayList(FFIData).init(std.heap.page_allocator);
 
-pub fn print(args: []StackWord) StackWord {
-    if (args.len != 2) {
-        std.log.err("print: Invalid number of arguments\n", .{});
-        return @as(StackWord, 1);
-    }
+pub fn print(stack: *Stack) StackWord {
     // fmt string
 
-    const value_type = @as(ValueType, @enumFromInt(args[1]));
-    const val = args[0];
-    const out_string = Value.valueToString(value_type, val, std.heap.page_allocator) catch {
+    const fmt_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
+    const fmt_len = @as(*const usize, @ptrCast(@alignCast(fmt_ptr))).*;
+    const format_str = fmt_ptr[8 .. 8 + fmt_len];
+
+    // Get the number of arguments from the format string
+    const num_args = std.mem.count(u8, format_str, "%");
+
+    // Create an array to hold the arguments
+    var args = std.ArrayList(StackWord).init(std.heap.page_allocator);
+    defer args.deinit();
+
+    for (0..num_args) |_| {
+        args.append(stack.pop()) catch unreachable;
+    }
+    // Convert the format string to a C string
+    const c_format_str: [:0]u8 = std.heap.page_allocator.allocSentinel(u8, format_str.len, 0) catch {
+        std.log.err("system: Error duplicating format string\n", .{});
         return @as(StackWord, 1);
     };
+    defer std.heap.page_allocator.free(c_format_str);
 
-    const stdout = std.io.getStdOut();
-    // Print the formatted string
-    _ = stdout.writer().writeAll(out_string) catch {
-        std.log.err("print: Error writing to stdout\n", .{});
-        return @as(StackWord, 1);
-    };
+    @memcpy(c_format_str[0..format_str.len], format_str);
+    var res: c_int = 1;
 
-    return @as(StackWord, 0);
+    switch (args.items.len) {
+        0 => res = stdio.printf(c_format_str),
+        1 => res = stdio.printf(c_format_str, args.items[0]),
+        2 => res = stdio.printf(c_format_str, args.items[0], args.items[1]),
+        3 => res = stdio.printf(c_format_str, args.items[0], args.items[1], args.items[2]),
+        4 => res = stdio.printf(c_format_str, args.items[0], args.items[1], args.items[2], args.items[3]),
+        else => {
+            std.log.err("print: Too many arguments\n", .{});
+            return @as(StackWord, 1);
+        },
+    }
+    return @as(StackWord, @intCast(res));
 }
 
-// In ffi.zig, update string handling functions
-pub fn str_concat(args: []StackWord) StackWord {
-    if (args.len != 2) {
-        std.log.err("str_concat: Invalid number of arguments\n", .{});
-        return @as(StackWord, 1);
-    }
+pub fn str_concat(stack: *Stack) StackWord {
 
     // Get the string pointers and lengths - implementation depends on string memory layout
-    const str1_ptr = @as([*]const u8, @ptrFromInt(@as(usize, args[0])));
+    const str1_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
     const str1_len = @as(*const usize, @ptrCast(@alignCast(str1_ptr))).*;
     const str1 = str1_ptr[8 .. 8 + str1_len];
 
-    const str2_ptr = @as([*]const u8, @ptrFromInt(@as(usize, args[1])));
+    const str2_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
     const str2_len = @as(*const usize, @ptrCast(@alignCast(str2_ptr))).*;
     const str2 = str2_ptr[8 .. 8 + str2_len];
 
@@ -86,11 +104,10 @@ pub fn str_concat(args: []StackWord) StackWord {
     return @as(StackWord, @intFromPtr(memory.ptr));
 }
 
-pub fn input(args: []StackWord) StackWord {
-    _ = args;
+pub fn input(stack: *Stack) StackWord {
+    _ = stack;
 
     // returns a String ptr as a StackWord
-
     const stdin = std.io.getStdIn();
     const reader = stdin.reader();
 
@@ -115,13 +132,8 @@ pub fn input(args: []StackWord) StackWord {
     return @as(StackWord, @intFromPtr(memory.ptr));
 }
 
-pub fn intFromString(args: []StackWord) StackWord {
-    if (args.len != 1) {
-        std.log.err("intFromString: Invalid number of arguments\n", .{});
-        return @as(StackWord, 1);
-    }
-
-    const str_ptr = @as([*]const u8, @ptrFromInt(@as(usize, args[0])));
+pub fn intFromString(stack: *Stack) StackWord {
+    const str_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
     const str_len = @as(*const usize, @ptrCast(@alignCast(str_ptr))).*;
     const str = str_ptr[8 .. 8 + str_len];
 
@@ -133,13 +145,46 @@ pub fn intFromString(args: []StackWord) StackWord {
     return Global.toStackWord(intval);
 }
 
-pub fn registerFFI(comptime name: []const u8, comptime args: []const ValueType, comptime ret: ValueType, comptime function: FFIFn) !void {
-    // Make a copy of the args slice to own it
+pub fn system(stack: *Stack) StackWord {
+    var command_args = std.heap.page_allocator.alloc([]const u8, stack.sp) catch {
+        std.log.err("system: Error allocating memory for command arguments\n", .{});
+        return @as(StackWord, 1);
+    };
 
+    for (0..stack.sp) |i| {
+        const str_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
+        const str_len = @as(*const usize, @ptrCast(@alignCast(str_ptr))).*;
+        const str = str_ptr[8 .. 8 + str_len];
+        command_args[i] = str;
+    }
+
+    const result = std.process.Child.run(.{ .allocator = std.heap.page_allocator, .argv = command_args }) catch {
+        std.log.err("system: Error executing command\n", .{});
+        return @as(StackWord, 1);
+    };
+    const res = std.heap.page_allocator.alloc(u8, result.stdout.len) catch {
+        std.log.err("system: Error allocating memory for result\n", .{});
+        return @as(StackWord, 1);
+    };
+    @memcpy(res, result.stdout);
+    return @as(StackWord, @intFromPtr(res.ptr));
+}
+
+pub fn initFFI() !void {
+    // Register the print function
+    try registerFFI("print", &[_]ValueType{.String}, .None, print, false);
+    try registerFFI("str_concat", &[_]ValueType{ .String, .String }, .String, str_concat, false);
+    try registerFFI("input", &[_]ValueType{}, .String, input, false);
+    try registerFFI("intFromString", &[_]ValueType{.String}, .Int, intFromString, false);
+    try registerFFI("system", &[_]ValueType{}, .String, system, true);
+}
+
+pub fn registerFFI(comptime name: []const u8, comptime args: []const ValueType, comptime ret: ValueType, comptime function: FFIFn, comptime arbitrary_args: bool) !void {
     const ffi_data = FFIData{
         .arg_types = args,
         .ret = ret,
         .function = function,
+        .arbitrary_args = arbitrary_args,
     };
     try FFI_mapping.put(name, ffi_data);
     try FFI_mapping_linear.append(ffi_data);
@@ -150,26 +195,16 @@ pub fn getFFIArgLen(name: []const u8) !usize {
     return ffi_data.arg_types.len;
 }
 
-pub fn callFFI(name: []const u8, args: []Value) !Value {
+pub fn callFFI(name: []const u8, stack: *Stack) !Value {
     const ffi_data = FFI_mapping.get(name);
     if (ffi_data) |data| {
-        return data.call(args);
+        return data.call(stack);
     } else {
         return error.FunctionNotFound;
     }
 }
 
-pub fn initFFI() !void {
-    // Register the print function
-    try registerFFI("print", &[_]ValueType{ .Int, .Int }, .None, print);
-    try registerFFI("str_concat", &[_]ValueType{ .String, .String }, .String, str_concat);
-    try registerFFI("input", &[_]ValueType{}, .String, input);
-    try registerFFI("intFromString", &[_]ValueType{.String}, .Int, intFromString);
-}
-
 pub fn deinitFFI() void {
-    // No specific deinitialization needed for FFI,
-    // but we can clear the mapping if necessary.
     FFI_mapping.deinit();
     FFI_mapping_linear.deinit();
     std.log.debug("FFI deinitialized", .{});

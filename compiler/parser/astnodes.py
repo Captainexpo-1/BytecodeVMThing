@@ -112,6 +112,7 @@ class FunctionDecl(Decl):
     return_type: Type
     body: List[Stmt]
     is_extern: bool = False
+    is_variadic: bool = False
     
 @dataclass
 class Program(Node):

@@ -53,11 +53,21 @@ class Lexer:
             ('DIVIDE', r'/'),
             ('NEWLINE', r'\n'),
             ('WHITESPACE', r'[ \t]+'),
+            ('DOTDOTDOT', r'\.\.\.'),
             ('IDENTIFIER', r'[a-zA-Z_][a-zA-Z0-9_]*'),
         ]
 
         self.regex = '|'.join(f'(?P<{name}>{pattern})' for name, pattern in self.token_specs)
         self.pattern = re.compile(self.regex)
+
+    def parse_string(self, string: str):
+        # escape sequences
+        string = string.replace('\\n', '\n')
+        string = string.replace('\\t', '\t')
+        string = string.replace('\\"', '"')
+        string = string.replace("\\'", "'")
+        string = string.replace('\\\\', '\\')
+        return string
 
     def tokenize(self):
         pos = 0
@@ -96,7 +106,7 @@ class Lexer:
 
             # Remove quotes from string literals
             if token_type == 'STRING_LITERAL':
-                token_value = token_value[1:-1]
+                token_value = self.parse_string(token_value[1:-1])
 
             # Get enum type (fallback to UNKNOWN)
             try:

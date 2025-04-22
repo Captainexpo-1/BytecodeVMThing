@@ -384,9 +384,8 @@ pub const Machine = struct {
             OpCode.CallFFI => {
                 const func_index = instr.operand;
                 const func: FFI.FFIData = FFI.FFI_mapping_linear.items[func_index];
-                const args_arr: []StackWord = self.stack.popN(func.arg_types.len);
 
-                const res: StackWord = func.call(args_arr) catch |err| {
+                const res: StackWord = func.call(&self.stack) catch |err| {
                     self.errorAndStop(std.fmt.allocPrint(allocator, "FFI call to {d} failed: {?}", .{ func_index, err }) catch "Error");
                     return;
                 };

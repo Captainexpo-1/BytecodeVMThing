@@ -1,7 +1,7 @@
 from typing import List, Optional, Any
 from compiler.lexer.token import Token, TokenType, types
 from compiler.parser.astnodes import (
-    Node, Expr, Stmt, Decl,
+    Expr, Stmt, Decl,
     Binary, Unary, Literal, Variable, Call, TypeLiteral,
     ExprStmt, VarDeclStmt, ReturnStmt, IfStmt, BlockStmt,
     Param, FunctionDecl, Program,
@@ -50,10 +50,14 @@ class Parser:
     def extern_declaration(self) -> FunctionDecl:
         name = self.consume(TokenType.IDENTIFIER, "Expected function name after 'extern'").value
         self.consume(TokenType.LPAREN, "Expected '(' after function name")
-        
+        is_variadic = False
         params = []
-        if not self.check(TokenType.RPAREN):
+        if self.match(TokenType.DOTDOTDOT):
+            # Handle variadic parameters
+            is_variadic = True
+        elif not self.check(TokenType.RPAREN):
             while True:
+                
                 type_token = self.consume_any(types, "Expected parameter type")
                 if type_token.token_type not in [TokenType.INT, TokenType.STRING, TokenType.NONE]:
                     # To support more types like INT, STRING
@@ -82,6 +86,7 @@ class Parser:
             column=return_type_token.column,
             name=name,
             params=params,
+            is_variadic=is_variadic,
             return_type=return_type,
             body=[],
             is_extern=True
@@ -91,9 +96,13 @@ class Parser:
         token_type = self.previous().token_type
         name = self.consume(TokenType.IDENTIFIER, "Expected function name").value
         self.consume(TokenType.LPAREN, "Expected '(' after function name")
-        
+        is_variadic = False
         params = []
-        if not self.check(TokenType.RPAREN):
+        if self.match(TokenType.DOTDOTDOT):
+            # Handle variadic parameters
+            is_variadic = True
+        elif not self.check(TokenType.RPAREN):
+                
             while True:
                 param_name = self.consume(TokenType.IDENTIFIER, "Expected parameter name").value
                 self.consume(TokenType.COLON, "Expected ':' after parameter name")
@@ -131,7 +140,8 @@ class Parser:
             params=params,
             return_type=return_type,
             body=body,
-            is_extern=False
+            is_extern=False,
+            is_variadic=is_variadic
         )
     
     # Parsing statements
