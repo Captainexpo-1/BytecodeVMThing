@@ -5,7 +5,7 @@ from compiler.parser.astnodes import (
     Binary, Unary, Literal, Variable, Call, TypeLiteral,
     ExprStmt, VarDeclStmt, ReturnStmt, IfStmt,
     Param, FunctionDecl, Program,
-    Type
+    Type, WhileLoop, Assignment, TransPointer
 )
 
 class ParseError(Exception):
@@ -15,6 +15,26 @@ class ParseError(Exception):
         super().__init__(f"Parse error at {token}: {message}")
 
 class Parser:
+    OPERATORS = {
+        TokenType.ASSIGN:    (1, 'right'),
+        TokenType.AS:        (1, 'left'),
+        TokenType.EQ:        (1, 'left'),
+        TokenType.NEQ:       (1, 'left'),
+        TokenType.LT:        (2, 'left'),
+        TokenType.GT:        (2, 'left'),
+        TokenType.PLUS:      (3, 'left'),
+        TokenType.MINUS:     (3, 'left'),
+        TokenType.STAR:      (4, 'left'),
+        TokenType.DIVIDE:    (4, 'left'),
+    }
+    UNARY_OPERATORS = {
+        TokenType.MINUS,
+        TokenType.BANG,
+        TokenType.AMPERSAND,
+        TokenType.STAR,
+    }
+
+    
     def __init__(self, tokens: List[Token]):
         self.tokens: List[Token] = tokens
         self.current: int = 0
@@ -48,7 +68,7 @@ class Parser:
         raise self.error(self.peek(), "Expected declaration")
     
     def extern_declaration(self) -> FunctionDecl:
-        name = self.consume(TokenType.IDENTIFIER, "Expected function name after 'extern'").value
+        name = self.consume(TokenType.IDENTIFIER, "Expected function name after 'extern'")
         self.consume(TokenType.LPAREN, "Expected '(' after function name")
         is_variadic = False
         params = []
@@ -72,19 +92,16 @@ class Parser:
         self.consume(TokenType.RPAREN, "Expected ')' after parameters")
         self.consume(TokenType.ARROW, "Expected '->' after parameter list")
         
-        return_type_token = self.consume(None, "Expected return type")
-        if return_type_token.token_type not in [TokenType.INT, TokenType.STRING, TokenType.NONE]:
-            raise self.error(return_type_token, "Expected return type")
         
-        return_type = Type.from_token_value(return_type_token.value)
+        return_type = self.parse_type()
         
         # Optional semicolon
         self.match(TokenType.SEMICOLON)
         
         return FunctionDecl(
-            line=return_type_token.line,
-            column=return_type_token.column,
-            name=name,
+            line=name.line,
+            column=name.column,
+            name=name.value,
             params=params,
             is_variadic=is_variadic,
             return_type=return_type,
@@ -94,7 +111,7 @@ class Parser:
     
     def function_declaration(self) -> FunctionDecl:
         _token_type = self.previous().token_type
-        name = self.consume(TokenType.IDENTIFIER, "Expected function name").value
+        name = self.consume(TokenType.IDENTIFIER, "Expected function name")
         self.consume(TokenType.LPAREN, "Expected '(' after function name")
         is_variadic = False
         params = []
@@ -120,11 +137,7 @@ class Parser:
         self.consume(TokenType.RPAREN, "Expected ')' after parameters")
         self.consume(TokenType.ARROW, "Expected '->' after parameter list")
         
-        return_type_token = self.advance()
-        if return_type_token.token_type not in [TokenType.INT, TokenType.STRING, TokenType.NONE]:
-            raise self.error(return_type_token, "Expected return type")
-        
-        return_type = Type.from_token_value(return_type_token.value)
+        return_type = self.parse_type()
         
         # Parse the function body statements
         body = []
@@ -134,9 +147,9 @@ class Parser:
         self.consume(TokenType.END, "Expected 'end' after function body")
         
         return FunctionDecl(
-            line=return_type_token.line,
-            column=return_type_token.column,
-            name=name,
+            line=name.line,
+            column=name.column,
+            name=name.value,
             params=params,
             return_type=return_type,
             body=body,
@@ -153,6 +166,8 @@ class Parser:
             return self.return_statement()
         if self.match(TokenType.VAR):
             return self.var_declaration()
+        if self.match(TokenType.WHILE):
+            return self.while_statement()
         
         return self.expression_statement()
     
@@ -197,17 +212,30 @@ class Parser:
             value=value
         )
     
+    def while_statement(self) -> WhileLoop:
+        condition = self.expression()
+        self.consume(TokenType.THEN, "Expected 'then' after condition")
+        
+        body = []
+        while not self.check(TokenType.END) and not self.is_at_end():
+            body.append(self.statement())
+        self.consume(TokenType.END, "Expected 'end' after while body")
+        return WhileLoop(
+            line=condition.line,
+            column=condition.column,
+            condition=condition,
+            body=body
+        )
+    
     def var_declaration(self) -> VarDeclStmt:
         token = self.previous()
         name = self.consume(TokenType.IDENTIFIER, "Expected variable name").value
         
         self.consume(TokenType.COLON, "Expected ':' after variable name")
         
-        type_token = self.advance()
-        if type_token.token_type not in [TokenType.INT, TokenType.STRING, TokenType.NONE]:
-            raise self.error(type_token, "Expected variable type")
         
-        var_type = Type.from_token_value(type_token.value)
+        
+        var_type = self.parse_type()
         
         initializer = None
         if self.match(TokenType.ASSIGN):
@@ -224,10 +252,10 @@ class Parser:
             initializer=initializer
         )
     
+
     def expression_statement(self) -> ExprStmt:
         expr = self.expression()
         
-        # Optional semicolon
         self.match(TokenType.SEMICOLON)
         
         return ExprStmt(
@@ -236,86 +264,63 @@ class Parser:
             expression=expr
         )
     
-    # Parsing expressions
-    
     def expression(self) -> Expr:
-        return self.equality()
-    
-    def equality(self) -> Expr:
-        expr = self.comparison()
-        
-        while self.match(TokenType.EQ, TokenType.NEQ):
-            operator = self.previous().value
-            right = self.comparison()
-            expr = Binary(
-                line=expr.line,
-                column=expr.column,
-                left=expr,
-                operator=operator,
-                right=right
-            )
-        
+        return self.parse_precedence(0)
+
+    def parse_precedence(self, min_prec: int) -> Expr:
+        expr = self.parse_unary()
+
+        while True:
+            token = self.peek()
+            op_info = self.OPERATORS.get(token.token_type)
+            if not op_info:
+                break
+            prec, assoc = op_info
+            if prec < min_prec:
+                break
+
+            self.advance()
+            next_min_prec = prec + 1 if assoc == 'left' else prec
+            right = self.parse_precedence(next_min_prec)
+            
+            # Handle assignment expressions
+            if token.token_type == TokenType.ASSIGN:
+                if not self._is_valid_assignment_target(expr):
+                    raise self.error(token, "Invalid assignment target")
+                expr = Assignment(
+                    line=expr.line,
+                    column=expr.column,
+                    target=expr,
+                    value=right
+                )
+            else:
+                expr = Binary(
+                    line=expr.line,
+                    column=expr.column,
+                    left=expr,
+                    operator=token.value,
+                    right=right
+                )
         return expr
     
-    def comparison(self) -> Expr:
-        expr = self.term()
-        
-        while self.match(TokenType.LT, TokenType.GT):
-            operator = self.previous().value
-            right = self.term()
-            expr = Binary(
-                line=expr.line,
-                column=expr.column,
-                left=expr,
-                operator=operator,
-                right=right
-            )
-        
-        return expr
-    
-    def term(self) -> Expr:
-        expr = self.factor()
-        
-        while self.match(TokenType.PLUS, TokenType.MINUS):
-            operator = self.previous().value
-            right = self.factor()
-            expr = Binary(
-                line=expr.line,
-                column=expr.column,
-                left=expr,
-                operator=operator,
-                right=right
-            )
-        
-        return expr
-    
-    def factor(self) -> Expr:
-        expr = self.unary()
-        
-        while self.match(TokenType.MULTIPLY, TokenType.DIVIDE):
-            operator = self.previous().value
-            right = self.unary()
-            expr = Binary(
-                line=expr.line,
-                column=expr.column,
-                left=expr,
-                operator=operator,
-                right=right
-            )
-        
-        return expr
-    
-    def unary(self) -> Expr:
-        if self.match(TokenType.MINUS):
-            operator = self.previous().value
-            right = self.unary()
+    def _is_valid_assignment_target(self, expr: Expr) -> bool:
+        """Check if an expression is a valid assignment target."""
+        return isinstance(expr, Variable) or (
+            isinstance(expr, Unary) and expr.operator == "*"
+        )
+
+    def parse_unary(self) -> Expr:
+        print("Parsing unary expression, current token:", self.peek())
+        token = self.peek()
+        if token.token_type in self.UNARY_OPERATORS:
+            self.advance()
+            right = self.parse_unary()
             return Unary(
-                line=right.line,
-                column=right.column,
-                operator=operator,
+                line=token.line,
+                column=token.column,
+                operator=token.value,
                 right=right
             )
-        
         return self.call()
     
     def call(self) -> Expr:
@@ -407,6 +412,28 @@ class Parser:
             return expr
         
         raise self.error(self.peek(), "Expected expression")
+    
+    
+    def parse_type(self) -> Type:
+        token = self.peek()
+        
+        if self.match(TokenType.INT):
+            return Type.INT
+        if self.match(TokenType.STRING):
+            return Type.STRING
+        if self.match(TokenType.NONE):
+            return Type.NONE
+        if self.match(TokenType.BOOL):
+            return Type.BOOL
+        if self.match(TokenType.FLOAT):
+            return Type.FLOAT
+        if self.match(TokenType.POINTER):
+            self.consume(TokenType.LPAREN, "Expected '(' after 'pointer'")
+            parsed = self.parse_type()
+            self.consume(TokenType.RPAREN, "Expected ')' after pointer type")
+            return TransPointer(parsed)
+        
+        raise self.error(token, "Expected type")
     
     # Helper methods
     

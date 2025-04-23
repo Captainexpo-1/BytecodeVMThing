@@ -11,6 +11,8 @@ class TokenType(Enum):
     ELSE = auto()         # else
     END = auto()          # end
     RETURN = auto()       # return
+    WHILE = auto()         # while
+    AS = auto()           # as
     
     # Types
     INT = auto()          # int
@@ -30,13 +32,18 @@ class TokenType(Enum):
     # Operators
     PLUS = auto()         # +
     MINUS = auto()        # -
-    MULTIPLY = auto()     # *
+    STAR = auto()     # *
     DIVIDE = auto()       # /
     ASSIGN = auto()       # =
     EQ = auto()       # ==
     NEQ = auto()   # !=
     LT = auto()    # <
     GT = auto() # >
+    BANG = auto()   # !
+    AND = auto()   # &&
+    OR = auto()    # ||
+    AMPERSAND = auto()   # &
+    PIPE = auto()   # |
     
     # Punctuation
     LPAREN = auto()   # (

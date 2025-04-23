@@ -9,8 +9,7 @@ class Type(Enum):
     BOOL = "bool"
     FLOAT = "float"
     POINTER = "pointer"
-    
-    
+
     @staticmethod
     def from_token_value(value):
         if value == "int":
@@ -26,6 +25,22 @@ class Type(Enum):
         elif value == "pointer":
             return Type.POINTER
         raise ValueError(f"Unknown type: {value}")
+
+
+@dataclass
+class TransPointer:
+    type: Type
+
+    def __str__(self):
+        return f"pointer to {self.type.value}"
+
+    def __repr__(self):
+        return f"TransPointer({self.type})"
+
+    def __eq__(self, other):
+        if isinstance(other, TransPointer):
+            return self.type == other.type
+        return False
 
 # Base class for all AST nodes
 @dataclass
@@ -117,3 +132,16 @@ class FunctionDecl(Decl):
 @dataclass
 class Program(Node):
     declarations: List[Decl]
+    
+    
+@dataclass
+class WhileLoop(Stmt):
+    condition: Expr
+    body: List[Stmt]
+
+    
+class Assignment(Expr):
+    def __init__(self, line, column, target, value):
+        super().__init__(line, column)
+        self.target = target  # Variable, Unary (for *x), etc.
+        self.value = value

@@ -1,0 +1,25 @@
+extern print(string) -> none;
+extern strConcat(string, string) -> string;
+extern input() -> string;
+extern intFromStr(string) -> int;
+extern system(string) -> int;
+extern toString(...) -> string;
+
+
+// Main function - entry point of the program
+fn main() -> none
+    var x: int = fibb(intFromStr(input()));
+    var o: string = strConcat(toString(#INT, x), "\n");
+    print(o);
+    return;
+end
+
+fn fibb(a: int) -> int
+    if a < 2 then
+        return a;
+    else
+        return fibb(a - 2) + fibb(a - 1);
+    end
+end
+
+

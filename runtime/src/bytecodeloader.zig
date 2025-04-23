@@ -95,14 +95,10 @@ fn readValue(data: []const u8, pos: *usize) !std.meta.Tuple(&[_]type{ StackWord,
 
             if (pos.* + str_len > data.len) return ByteCodeParseError.InvalidBytecode;
 
-            // Allocate memory for length-prefixed string (8 bytes for length + string data)
-            const memory = allocator.alloc(u8, 8 + str_len) catch return ByteCodeParseError.InvalidBytecode;
+            const memory = allocator.allocSentinel(u8, str_len, 0) catch return ByteCodeParseError.InvalidBytecode;
 
-            // Store length in first 8 bytes
-            @as(*usize, @ptrCast(@alignCast(memory.ptr))).* = str_len;
-
-            // Copy string data after the length
-            @memcpy(memory[8..], data[pos.* .. pos.* + str_len]);
+            // Copy string data
+            @memcpy(memory[0..str_len], data[pos.* .. pos.* + str_len]);
 
             pos.* += str_len;
 

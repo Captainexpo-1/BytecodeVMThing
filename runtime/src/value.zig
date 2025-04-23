@@ -13,7 +13,7 @@ pub const ValueType = enum {
     Pointer,
 };
 
-pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.Allocator) ![]const u8 {
+pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.Allocator) ![:0]const u8 {
     switch (val_type) {
         .Int => {
             const intval = Global.fromStackWord(i64, val);
@@ -24,15 +24,19 @@ pub fn valueToString(val_type: ValueType, val: StackWord, allocator: std.mem.All
             return try stringutil.fromFloat(floatval, allocator);
         },
         .String => {
-            const str_pointer = @as([*]const u8, @ptrFromInt(@as(usize, val)));
-            // Add @alignCast to ensure proper alignment for usize
-            const len = @as(*const usize, @ptrCast(@alignCast(str_pointer))).*;
-            return str_pointer[8 .. 8 + len]; // Adjust based on how length is stored
+            const str_pointer = @as([*:0]const u8, @ptrFromInt(@as(usize, val)));
+            const str_len = std.mem.len(str_pointer);
+            const str_slice = str_pointer[0..str_len];
+            return try stringutil.concat(str_slice, "", allocator);
         },
         .Bool => {
             const boolval = Global.fromStackWord(u64, val) != 0;
             return try stringutil.fromBool(boolval, allocator);
         },
-        else => return std.fmt.allocPrint(allocator, "Unsupported type for string conversion: {s}", .{@tagName(val_type)}),
+        .Pointer => {
+            const ptr = @as(*const u8, @ptrFromInt(@as(usize, val)));
+            return try stringutil.fromPointer(ptr, allocator);
+        },
+        else => return std.fmt.allocPrintZ(allocator, "Unsupported type for string conversion: {s}", .{@tagName(val_type)}),
     }
 }

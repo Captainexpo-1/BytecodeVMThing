@@ -278,12 +278,12 @@ pub const Machine = struct {
                 }
             },
             // Variable access
-            OpCode.LoadVarI => {
+            OpCode.LoadVar => {
                 const idx = instr.operand;
                 const v = self.current_callframe.?.local_vars.items[idx];
                 self.stack.push(v);
             },
-            OpCode.StoreVarI => {
+            OpCode.StoreVar => {
                 const idx = instr.operand;
                 const v = self.stack.pop();
                 while (idx >= self.current_callframe.?.local_vars.items.len) {
@@ -291,62 +291,23 @@ pub const Machine = struct {
                 }
                 self.current_callframe.?.local_vars.items[idx] = v;
             },
-            OpCode.LoadVarF => {
-                const idx = instr.operand;
-                const v = self.current_callframe.?.local_vars.items[idx];
-                self.stack.push(v);
-            },
-            OpCode.StoreVarF => {
-                const idx = instr.operand;
-                const v = self.stack.pop();
-                while (idx >= self.current_callframe.?.local_vars.items.len) {
-                    self.current_callframe.?.local_vars.append(0) catch {};
-                }
-                self.current_callframe.?.local_vars.items[idx] = v;
-            },
-            OpCode.StoreVarStr => {
-                const idx = instr.operand;
-                const v = self.stack.pop();
-                while (idx >= self.current_callframe.?.local_vars.items.len) {
-                    self.current_callframe.?.local_vars.append(0) catch {};
-                }
-                self.current_callframe.?.local_vars.items[idx] = v;
-            },
-            OpCode.LoadVarStr => {
-                const idx = instr.operand;
-                const v = self.current_callframe.?.local_vars.items[idx];
-                self.stack.push(v);
-            },
-            // Pointer operations
-            OpCode.LoadAddrI => {
+
+            OpCode.LoadAddr => {
                 // get the address of the variable at idx
                 const idx = instr.operand;
                 const ptr: *StackWord = &self.current_callframe.?.local_vars.items[idx];
                 self.stack.push(@as(StackWord, @bitCast(@as(usize, @intFromPtr(ptr)))));
             },
-            OpCode.DerefI => {
-                const addr = @as(*i64, @ptrFromInt(@as(usize, @bitCast(self.stack.pop()))));
-                self.stack.push(@as(StackWord, @bitCast(addr.*)));
+            OpCode.Deref => {
+                const addr = @as(*u64, @ptrFromInt(@as(usize, @bitCast(self.stack.pop()))));
+                const v = @as(StackWord, @bitCast(@as(usize, @intFromPtr(addr))));
+                self.stack.push(v);
             },
-            OpCode.StoreDerefI => {
-                const addr = @as(*i64, @ptrFromInt(@as(usize, @bitCast(self.stack.pop()))));
-                const v = @as(i64, @bitCast(self.stack.pop()));
-                addr.* = v;
-            },
-            OpCode.LoadAddrF => {
-                // get the address of the variable at idx
-                const idx = instr.operand;
-                const ptr: *StackWord = &self.current_callframe.?.local_vars.items[idx];
-                self.stack.push(@as(StackWord, @bitCast(@as(usize, @intFromPtr(ptr)))));
-            },
-            OpCode.DerefF => {
-                const addr = @as(*f64, @ptrFromInt(@as(usize, @bitCast(self.stack.pop()))));
-                self.stack.push(@as(StackWord, @bitCast(addr.*)));
-            },
-            OpCode.StoreDerefF => {
-                const addr = @as(*f64, @ptrFromInt(@as(usize, @bitCast(self.stack.pop()))));
-                const v = @as(f64, @bitCast(self.stack.pop()));
-                addr.* = v;
+            OpCode.StoreDeref => {
+                const addr = @as(*u64, @ptrFromInt(@as(usize, @bitCast(self.stack.pop()))));
+                const v = self.stack.pop();
+                const ptr: *StackWord = @ptrCast(addr);
+                ptr.* = v;
             },
             OpCode.AllocI => {
                 const size = @as(usize, @bitCast(self.stack.pop()));

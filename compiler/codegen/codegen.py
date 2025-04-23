@@ -10,6 +10,7 @@ from compiler.bytecodegen import (
     Instruction, 
     OpCode,
     ValueType,
+    TransPointer,
     Value
 )
 from collections import OrderedDict
@@ -19,7 +20,7 @@ class CodeGenerator:
     def __init__(self, ast):
         self.ast = ast
         self.current_function: Optional[Function] = None
-        self.locals: List[Tuple[str, ValueType]] = {}
+        self.locals: List[Tuple[str, ValueType|TransPointer]] = {}
         self.constants: List[Value] = []
         self.functions: OrderedDict[str, Function] = OrderedDict()
         self.extern_functions: OrderedDict[str, Function] = OrderedDict()
@@ -72,7 +73,7 @@ class CodeGenerator:
         return self.visit_Program(self.ast)
 
 
-    def visit(self, node):
+    def visit(self, node) -> ValueType:
         print("Visiting node:", node)
         method_name = f"visit_{node.__class__.__name__.lower()}"
         visitor = getattr(self, method_name, self.generic_visit)
@@ -129,7 +130,9 @@ class CodeGenerator:
         pass
     
     def ast_type_to_value_type(self, ast_type: ast.Type) -> ValueType:
-        assert isinstance(ast_type, ast.Type)
+        assert isinstance(ast_type, ast.Type) or isinstance(ast_type, ast.TransPointer)
+        if isinstance(ast_type, ast.TransPointer):
+            return TransPointer(self.ast_type_to_value_type(ast_type.type))
         m = {
             ast.Type.INT: ValueType.INT,
             ast.Type.FLOAT: ValueType.FLOAT,
@@ -144,16 +147,6 @@ class CodeGenerator:
     
     def get_instruction_type(self, instr_type: str, type: ValueType) -> OpCode:
         m = {
-            "storevar": {
-                ValueType.INT: OpCode.StoreVarI,
-                ValueType.FLOAT: OpCode.StoreVarF,
-                ValueType.STRING: OpCode.StoreVarStr,
-            },
-            "loadvar": {
-                ValueType.INT: OpCode.LoadVarI,
-                ValueType.FLOAT: OpCode.LoadVarF,
-                ValueType.STRING: OpCode.LoadVarStr,
-            },
             "add": {
                 ValueType.INT: OpCode.AddI,
                 ValueType.FLOAT: OpCode.AddF,                
@@ -185,41 +178,13 @@ class CodeGenerator:
             "gt": {
                 ValueType.INT: OpCode.GtI,
                 ValueType.FLOAT: OpCode.GtF,
-            }
+            },
         }
         if instr_type in m:
             if type in m[instr_type]:
                 return m[instr_type][type]
         raise Exception(f"Unknown instruction type: {instr_type} for type: {type}")
         
-    """def visit_functiondecl(self, node: ast.FunctionDecl):
-        return_type = node.return_type
-        params = node.params
-        body = node.body
-                        
-        if node.is_extern:
-            self.add_extern_function(node.name, Function(
-                arg_types=list(map(lambda param: self.ast_type_to_value_type(param.type), params)),
-                return_type=self.ast_type_to_value_type(return_type),
-                code=[],
-                is_variadic=node.is_variadic,
-                name=node.name
-            ))
-            return
-        self.current_function = Function(
-            arg_types=list(map(lambda param: self.ast_type_to_value_type(param.type), params)),
-            return_type=self.ast_type_to_value_type(return_type),
-            code=[],
-            is_variadic=node.is_variadic,
-            name=node.name
-        )
-        self.add_function(node.name, self.current_function)
-        self.locals = [(param.name, self.ast_type_to_value_type(param.type)) for param in params]
-        for stmt in body:
-            self.visit(stmt)
-        self.current_function = None
-        self.locals = []"""
-
     def find_local(self, name: str) -> int:
         for i, (local_name, _) in enumerate(self.locals):
             if local_name == name:
@@ -240,7 +205,7 @@ class CodeGenerator:
         if self.find_local(node.name) != -1:
             raise Exception(f"Variable {node.name} already declared")   
         t = self.ast_type_to_value_type(node.type)    
-        self.add_instruction(self.get_instruction_type("storevar", t), self.add_local(node.name, t))
+        self.add_instruction(OpCode.StoreVar, self.add_local(node.name, t))
         return t
     
     def get_type(self, instruction: Instruction) -> ValueType:
@@ -254,27 +219,150 @@ class CodeGenerator:
             return self.constants[instruction.arg].type
         raise Exception(f"Unknown instruction type: {instruction.opcode}")
     
+    def constant_fold(self, node: ast.Binary) -> Optional[Value]:
+        left: ast.Literal = node.left
+        right: ast.Literal = node.right
+        
+        op = node.operator
+         
+        match op:
+            case "+":
+                return Value(left.value + right.value, left.type)
+            case "-":
+                return Value(left.value - right.value, left.type)
+            case "*":
+                return Value(left.value * right.value, left.type)
+            case "/":
+                return Value(left.value / right.value, left.type)
+            case "==":
+                return Value(left.value == right.value, ValueType.BOOL)
+            case "!=":
+                return Value(left.value != right.value, ValueType.BOOL)
+            case "<":
+                return Value(left.value < right.value, ValueType.BOOL)
+            case ">":
+                return Value(left.value > right.value, ValueType.BOOL)
+            case _:
+                raise Exception(f"Unknown binary operator: {op}")
     
+    def visit_assignment(self, node: ast.Assignment):
+        if isinstance(node.target, ast.Variable):
+            # normal assignment
+            local_index = self.find_local(node.target.name)
+            if local_index == -1:
+                raise Exception(f"Variable {node.target.name} not found")
+            r_type: ValueType = self.visit(node.value)
+            if r_type != self.locals[local_index][1]:
+                raise Exception(f"Type mismatch: {r_type} and {self.locals[local_index][1]}")
+            self.add_instruction(OpCode.StoreVar, local_index)
+            return r_type
+        else:
+            # then it must be a pointer assignment like *(ptr + 1) = 5
+            # evaluate the left side to get the address, and then store the value
+            r_type = self.visit(node.value)
+            if r_type != ValueType.INT:
+                raise Exception(f"Type mismatch: {r_type} and {ValueType.INT}")
+            if isinstance(node.target, ast.Unary) and node.target.operator == "*":
+                self.visit(node.target.right)
+                self.add_instruction(OpCode.StoreDeref, 0)
+            
+                
+    
+    def visit_unary(self, node: ast.Unary):
+        r_type: ValueType = self.visit(node.right)
+        
+        if node.operator == "-":
+            self.add_instruction(self.get_instruction_type("sub", r_type))
+            return r_type
+        elif node.operator == "!":
+            self.add_instruction(self.get_instruction_type("not", r_type))
+            return ValueType.BOOL
+        elif node.operator == "&":
+            if isinstance(node.right, ast.Variable):
+                local_index = self.find_local(node.right.name)
+                if local_index == -1:
+                    raise Exception(f"Variable {node.right.name} not found")
+                # Store original type that this pointer points to
+                pointed_type = self.locals[local_index][1]
+                self.add_instruction(OpCode.LoadAddr, local_index)
+                return TransPointer(pointed_type)
+            else:
+                raise Exception("Address-of operator requires a variable")
+        elif node.operator == "*":
+            if not isinstance(r_type, TransPointer):
+                raise Exception(f"Type mismatch: {r_type} and {ValueType.POINTER}")
+            self.add_instruction(OpCode.Deref, 0)
+            return r_type.type
+
+        
+        raise Exception(f"Unknown unary operator: {node.operator}")
+        
+    def visit_whileloop(self, node: ast.WhileLoop):
+        condition_type = self.visit(node.condition)
+        if condition_type != ValueType.BOOL:
+            raise Exception(f"Condition type must be bool, but got {condition_type}")
+        
+        jump = self.add_instruction(OpCode.Jz, 0)
+        
+        for stmt in node.body:
+            self.visit(stmt)
+            
+        jump_end = self.add_instruction(OpCode.Jmp, 0)
+        jump.arg = self.cur_pos()
+        
+        jump_end.arg = self.cur_pos()
+        
+        return ValueType.NONE
+        
     def visit_binary(self, node: ast.Binary):
+        if isinstance(node.left, ast.Literal) and isinstance(node.right, ast.Literal):
+            c=self.add_constant(self.constant_fold(node))            
+            self.add_instruction(OpCode.LoadConst, c)
+            return self.constants[c].type
+        
         l_type: ValueType = self.visit(node.left)
         r_type: ValueType = self.visit(node.right)
+        
+        ptr_type = None
+        
+        is_ptr_op = False
+        
+        if isinstance(l_type, TransPointer):
+            ptr_type = l_type
+            is_ptr_op = True
+            l_type = ValueType.INT
+        if isinstance(r_type, TransPointer):
+            ptr_type = r_type
+            is_ptr_op = True
+            r_type = ValueType.INT
+        
         if l_type != r_type:
             raise Exception(f"Type mismatch: {l_type} and {r_type}")
         if node.operator == "+":
             self.add_instruction(self.get_instruction_type("add", l_type))
-            return l_type
+            return l_type if not is_ptr_op else ptr_type
         elif node.operator == "-":
             self.add_instruction(self.get_instruction_type("sub", l_type))
-            return l_type
+            return l_type if not is_ptr_op else ptr_type
         elif node.operator == "*":
             self.add_instruction(self.get_instruction_type("mul", l_type))
-            return l_type
+            return l_type if not is_ptr_op else ptr_type
         elif node.operator == "/":
             self.add_instruction(self.get_instruction_type("div", l_type))
-            return l_type
+            return l_type if not is_ptr_op else ptr_type
         elif node.operator == "==":
             self.add_instruction(self.get_instruction_type("eq", l_type))
             return ValueType.BOOL
+        elif node.operator == "!=":
+            self.add_instruction(self.get_instruction_type("neq", l_type))
+            return ValueType.BOOL
+        elif node.operator == "<":
+            self.add_instruction(self.get_instruction_type("lt", l_type))
+            return ValueType.BOOL
+        elif node.operator == ">":
+            self.add_instruction(self.get_instruction_type("gt", l_type))
+            return ValueType.BOOL
+        
         # TODO: Add support for other binary operators
             
         raise Exception(f"Unknown binary operator: {node.operator}")
@@ -295,8 +383,9 @@ class CodeGenerator:
             OpCode.LoadConst, const
         )
         return self.constants[const].type
+    
     def visit_returnstmt(self, node: ast.ReturnStmt) -> ValueType:
-        if node.value:
+        if node.value and node.value.value:
             self.visit(node.value)
         self.add_instruction(OpCode.Ret)
         return ValueType.NONE
@@ -332,7 +421,7 @@ class CodeGenerator:
         
         for idx, arg in enumerate(reversed(node.arguments)):
             a = self.visit(arg)
-            assert isinstance(a, ValueType)
+            assert isinstance(a, ValueType) or isinstance(a, TransPointer)
             args.append(a)
             if not func.is_variadic:
                 if a != expected_arg_types[idx]:
@@ -369,7 +458,7 @@ class CodeGenerator:
         if local_index == -1:
             raise Exception(f"Variable {node.name} not found")
         self.add_instruction(
-            self.get_instruction_type("loadvar", self.locals[local_index][1]), local_index
+            OpCode.LoadVar, local_index
         )
         return self.locals[local_index][1]
     

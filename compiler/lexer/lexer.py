@@ -29,11 +29,18 @@ class Lexer:
             ('FLOAT', r'float\b'),                               # float type
             ('POINTER', r'pointer\b'),                           # pointer keyword
             ('NONE', r'none'),                                 # none keyword
+            ('WHILE', r'while\b'),                               # while keyword
+            ('AS', r'as\b'),                                   # as keyword
             ('ARROW', r'->'),                                  # Arrow
             ('FLOAT_LITERAL', r'\d+\.\d+'),                    # Float
             ('INTEGER_LITERAL', r'\d+'),                       # Integer
             ('STRING_LITERAL', r'"[^"]*"'),                    # String literal
             ('BOOL_LITERAL', r'true|false'),                   # Boolean literal
+            ('AND', r'&&'),                                    # Logical AND
+            ('OR', r'\|\|'),                                   # Logical OR
+            ('BANG', r'!'),                                    # Logical NOT
+            ('AMPERSAND', r'&'),                               # Bitwise AND
+            ('PIPE', r'\|'),                                   # Bitwise OR
             ('EQ', r'=='),                                     # Equals
             ('NEQ', r'!='),                                    # Not equals
             ('LT', r'<'),                                      # Less than
@@ -49,7 +56,7 @@ class Lexer:
             ('HASH', r'#'),
             ('PLUS', r'\+'),
             ('MINUS', r'-'),
-            ('MULTIPLY', r'\*'),
+            ('STAR', r'\*'),
             ('DIVIDE', r'/'),
             ('NEWLINE', r'\n'),
             ('WHITESPACE', r'[ \t]+'),

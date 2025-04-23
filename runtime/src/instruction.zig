@@ -55,21 +55,13 @@ pub const OpCode = enum(u8) {
     Ret, // Return from function
 
     // Variable stack frame access
-    LoadVarI,
-    LoadVarF,
-    StoreVarI,
-    StoreVarF,
-    StoreVarStr,
-    LoadVarStr,
+    LoadVar,
+    StoreVar,
 
-    // Pointer operations (typed)
-    LoadAddrI,
-    DerefI,
-    StoreDerefI,
-
-    LoadAddrF,
-    DerefF,
-    StoreDerefF,
+    // Pointer operations
+    LoadAddr,
+    Deref,
+    StoreDeref,
 
     // Heap (typed)
     AllocI,

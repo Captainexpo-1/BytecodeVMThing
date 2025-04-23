@@ -11,6 +11,9 @@ const stdio = @cImport({
     @cDefine("_NO_CRT_STDIO_INLINE", "1");
     @cInclude("stdio.h");
 });
+const stdlib = @cImport({
+    @cInclude("stdlib.h");
+});
 
 // Define the function type
 pub const FFIFn = *const fn (stack: *Stack) StackWord;
@@ -104,8 +107,11 @@ pub fn intFromString(stack: *Stack) StackWord {
     const str_len = @as(*const usize, @ptrCast(@alignCast(str_ptr))).*;
     const str = str_ptr[8 .. 8 + str_len];
 
-    const intval = std.fmt.parseInt(i64, str, 10) catch {
-        std.log.err("intFromString: Error parsing integer\n", .{});
+    // Trim whitespace (including CR and LF) before parsing
+    const trimmed = std.mem.trim(u8, str, &std.ascii.whitespace);
+
+    const intval = std.fmt.parseInt(i64, trimmed, 10) catch |err| {
+        std.log.err("Error parsing integer ({any})\n", .{err});
         return @as(StackWord, 1);
     };
 
@@ -135,28 +141,80 @@ pub fn toString(stack: *Stack) StackWord {
 }
 
 pub fn system(stack: *Stack) StackWord {
-    var command_args = std.heap.page_allocator.alloc([]const u8, stack.sp) catch {
-        std.log.err("system: Error allocating memory for command arguments\n", .{});
-        return @as(StackWord, 1);
-    };
+    const command_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
+    const command_len = @as(*const usize, @ptrCast(@alignCast(command_ptr))).*;
+    const command_str = command_ptr[8 .. 8 + command_len];
 
-    for (0..stack.sp) |i| {
-        const str_ptr = @as([*]const u8, @ptrFromInt(@as(usize, stack.pop())));
-        const str_len = @as(*const usize, @ptrCast(@alignCast(str_ptr))).*;
-        const str = str_ptr[8 .. 8 + str_len];
-        command_args[i] = str;
+    std.log.debug("system: Running command: {s}", .{command_str});
+
+    var args = std.ArrayList([]const u8).init(std.heap.page_allocator);
+    defer args.deinit();
+
+    // Split command into arguments
+    var start = @as(usize, 0);
+    var in_quote = false;
+    for (0..command_str.len) |i| {
+        if (command_str[i] == '"' and (i == 0 or command_str[i - 1] != '\\')) {
+            in_quote = !in_quote;
+        } else if (command_str[i] == ' ' and !in_quote) {
+            const arg = command_str[start..i];
+            if (arg.len > 0) {
+                args.append(arg) catch unreachable;
+            }
+            start = i + 1;
+        }
+    }
+    if (start < command_str.len) {
+        const arg = command_str[start..];
+        if (arg.len > 0) {
+            args.append(arg) catch unreachable;
+        }
+    }
+    if (args.items.len == 0) {
+        std.log.err("system: No command provided\n", .{});
+        return @as(StackWord, 1);
+    }
+    if (args.items[0].len == 0) {
+        std.log.err("system: Empty command\n", .{});
+        return @as(StackWord, 1);
     }
 
-    const result = std.process.Child.run(.{ .allocator = std.heap.page_allocator, .argv = command_args }) catch {
-        std.log.err("system: Error executing command\n", .{});
+    const result = std.process.Child.run(.{ .allocator = std.heap.page_allocator, .argv = args.items }) catch {
+        std.log.err("system: Error running command\n", .{});
         return @as(StackWord, 1);
     };
-    const res = std.heap.page_allocator.alloc(u8, result.stdout.len) catch {
+
+    const stderr = result.stderr;
+    if (stderr.len > 0) {
+        std.log.err("system: Command failed with error: {s}\n", .{stderr});
+        return @as(StackWord, 1);
+    }
+
+    std.debug.print("Command output: {s} | {s}\n", .{ result.stdout, result.stderr });
+
+    // Allocate new string with length prefix
+
+    const output = result.stdout;
+    const full_len = output.len + 8;
+    const memory = std.heap.page_allocator.alloc(u8, full_len) catch {
         std.log.err("system: Error allocating memory for result\n", .{});
         return @as(StackWord, 1);
     };
-    @memcpy(res, result.stdout);
-    return @as(StackWord, @intFromPtr(res.ptr));
+    // Store length in first 8 bytes
+    @as(*usize, @ptrCast(@alignCast(memory.ptr))).* = output.len;
+    // Copy string data
+    @memcpy(memory[8..], output);
+    return @as(StackWord, @intFromPtr(memory.ptr));
+}
+
+pub fn alloc(stack: *Stack) StackWord {
+    const length = stack.pop();
+    const type_size = stack.pop();
+    const ptr: *anyopaque = stdlib.malloc(@as(usize, length) * @as(usize, type_size)) orelse {
+        std.log.err("alloc: Error allocating memory\n", .{});
+        return @as(StackWord, 1);
+    };
+    return @as(StackWord, @intFromPtr(ptr));
 }
 
 pub fn initFFI() !void {
@@ -167,6 +225,7 @@ pub fn initFFI() !void {
     try registerFFI("intFromString", &[_]ValueType{.String}, .Int, intFromString, false);
     try registerFFI("system", &[_]ValueType{}, .String, system, true);
     try registerFFI("toString", &[_]ValueType{.Int}, .String, toString, false);
+    try registerFFI("alloc", &[_]ValueType{ .Int, .Int }, .Pointer, alloc, false);
 }
 
 pub fn registerFFI(comptime name: []const u8, comptime args: []const ValueType, comptime ret: ValueType, comptime function: FFIFn, comptime arbitrary_args: bool) !void {

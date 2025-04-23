@@ -1,6 +1,8 @@
 from typing import List, Any
 from enum import Enum
 import argparse
+from dataclasses import dataclass
+
 
 globalnum = 0
 
@@ -65,21 +67,13 @@ class OpCode(Enum):
     Ret = _auto()  # Return from function
 
     # Variable stack frame access
-    LoadVarI = _auto()
-    LoadVarF = _auto()
-    StoreVarI = _auto()
-    StoreVarF = _auto()
-    StoreVarStr = _auto()  # Store struct field
-    LoadVarStr = _auto()  # Load struct field
+    LoadVar = _auto()
+    StoreVar = _auto()
 
-    # Pointer operations (typed)
-    LoadAddrI = _auto()
-    DerefI = _auto()
-    StoreDerefI = _auto()
-    
-    LoadAddrF = _auto()
-    DerefF = _auto()
-    StoreDerefF = _auto()
+    # Pointer operations
+    LoadAddr = _auto()  # Load address of variable
+    Deref = _auto()  # Dereference pointer
+    StoreDeref = _auto()  # Store value at pointer address
 
     # Heap (typed)
     AllocI = _auto()
@@ -94,7 +88,6 @@ class OpCode(Enum):
     # Constants
     LoadConst = _auto()
 
-    
     # Halt VM
     Halt = _auto()
 
@@ -102,7 +95,7 @@ class OpCode(Enum):
     CallFFI = _auto()
 
     # Advanced control flow
-    TailCall = _auto()  # Tail call optimization
+    TailCall = _auto()
 
 globalnum = 0
 
@@ -116,6 +109,16 @@ class ValueType(Enum):
     LIST = _auto()
     STRUCT = _auto()
     POINTER = _auto()
+    
+
+
+@dataclass
+class TransPointer:
+    type: ValueType
+    value: int = ValueType.POINTER.value
+
+    def __str__(self):
+        return f"ptrto {self.type}"
 
 
 class Value:

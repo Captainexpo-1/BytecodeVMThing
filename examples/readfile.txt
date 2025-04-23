@@ -1,0 +1,15 @@
+extern print(string) -> none;
+extern strConcat(string, string) -> string;
+extern input() -> string;
+extern intFromStr(string) -> int;
+extern system(string) -> int;
+extern toString(...) -> string;
+
+
+fn main() -> none
+    var file_path: string = input();
+    var file_content: string = system(strConcat("cat ", file_path));
+    var o: string = strConcat("File content:\n", file_content);
+    print(o);
+    return;
+end

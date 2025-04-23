@@ -1,0 +1,14 @@
+extern print(string) -> none;
+extern strConcat(string, string) -> string;
+extern input() -> string;
+extern intFromStr(string) -> int;
+extern system(string) -> int;
+extern toString(...) -> string;
+extern alloc(int, int) -> pointer(int);
+
+// Main function - entry point of the program
+fn main() -> none
+    var x: string = "Hello, World!\n";
+    var y: pointer(string) = &x;
+    print(toString(#POINTER, y));
+end
